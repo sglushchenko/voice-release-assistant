@@ -3,6 +3,8 @@ name = "release-assistant"
 version = "0.1.0"
 description = "Voice assistant backend for App Store Connect release management"
 requires-python = ">=3.12"
+license = "MIT"
+license-files = ["../LICENSE"]
 dependencies = [
     "argon2-cffi>=25.1.0",
     "fastapi>=0.165.0",
