@@ -1,0 +1,27 @@
+# Local run of the API in a hardened container:
+#   cp backend/.env.example backend/.env   # then fill in the admin hash, API keys, etc.
+#   docker compose up --build
+#
+# The port is published on loopback only. Expose it beyond this machine behind a reverse
+# proxy that terminates TLS, and list that proxy in RELEASE_ASSISTANT_TRUSTED_PROXIES.
+services:
+  api:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    image: voice-release-assistant:dev
+    # Values containing `$` (the password hash) must be in single quotes in this file.
+    env_file:
+      - path: backend/.env
+        required: false
+    ports:
+      - "127.0.0.1:8000:8000"
+    restart: unless-stopped
+    # The service writes nothing, needs no privileges and no extra capabilities.
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true

@@ -1,0 +1,35 @@
+# macOS
+.DS_Store
+
+# Secrets — keys never go into a public repo
+.env
+.env.*
+!.env.example
+*.p8
+*.pem
+secrets/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+dist/
+*.egg-info/
+
+# Xcode / Swift
+xcuserdata/
+*.xcuserstate
+DerivedData/
+build/
+.build/
+.swiftpm/
+
+# Local tooling & experiment output
+.claude/settings.local.json
+benchmarks/results/raw/
+*.log

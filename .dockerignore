@@ -1,0 +1,9 @@
+# Allow-list: nothing enters the build context unless it is named here, so a stray .env,
+# private key or local virtualenv can never be copied into an image by accident.
+*
+!LICENSE
+!backend/pyproject.toml
+!backend/uv.lock
+!backend/src
+**/__pycache__
+**/*.pyc
