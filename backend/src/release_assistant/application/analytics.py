@@ -11,6 +11,7 @@ from collections.abc import Callable
 from datetime import UTC, date, datetime
 from decimal import Decimal
 
+from release_assistant.application.stats import change_pct
 from release_assistant.domain.entities import App, Entity, SalesKind, SalesRow
 from release_assistant.domain.errors import NotFoundError
 from release_assistant.domain.ports import AppCatalog, SalesReports
@@ -130,7 +131,7 @@ class AnalyticsService:
             app=apps[app_id] if app_id else None,
             current=current,
             previous=previous,
-            downloads_change_pct=_change_pct(current.downloads, previous.downloads),
+            downloads_change_pct=change_pct(current.downloads, previous.downloads),
             top_territories=self._top_territories(current_rows, top_territories),
             by_app=[] if app_id else self._by_app(current_rows, apps),
         )
@@ -175,9 +176,3 @@ class AnalyticsService:
             if (app_rows := [r for r in rows if r.app_id == app.id])
         ]
         return sorted(totals, key=lambda t: (-t.downloads, t.app.name))
-
-
-def _change_pct(current: int, previous: int) -> float | None:
-    if previous == 0:
-        return None
-    return round((current - previous) / previous * 100, 1)

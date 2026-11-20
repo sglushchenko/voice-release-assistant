@@ -15,6 +15,8 @@ from release_assistant.domain.entities import (
     BetaTester,
     Build,
     CustomerReview,
+    DateCoverage,
+    EngagementRow,
     ReviewResponse,
     SalesRow,
 )
@@ -102,8 +104,32 @@ class SalesReports(Protocol):
 
 
 @runtime_checkable
+class EngagementReports(Protocol):
+    """App Store Analytics funnel data (impressions, page views, downloads).
+
+    Apple generates these reports itself once a recurring request exists, publishing each
+    day 1-2 days late, so callers read what is available and check the coverage.
+    """
+
+    async def engagement_coverage(self) -> DateCoverage:
+        """Range currently published. Empty (both None) before the first report arrives."""
+        ...
+
+    async def list_engagement(self, start: date, end: date) -> list[EngagementRow]:
+        """Rows for every app with `start <= day <= end`, oldest first. Days outside the
+        coverage are absent, not zero."""
+        ...
+
+
+@runtime_checkable
 class AppStoreGateway(
-    AppCatalog, BuildCatalog, TesterDirectory, ReviewInbox, SalesReports, Protocol
+    AppCatalog,
+    BuildCatalog,
+    TesterDirectory,
+    ReviewInbox,
+    SalesReports,
+    EngagementReports,
+    Protocol,
 ):
     """Everything the application needs from App Store Connect in one object. Only the
     composition root asks for this; each service still depends on its single port."""

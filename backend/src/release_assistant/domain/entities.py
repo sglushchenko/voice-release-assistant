@@ -65,6 +65,37 @@ class SalesRow(Entity):
     currency: str = "USD"
 
 
+class EngagementRow(Entity):
+    """One day of App Store funnel counts for one app in one territory.
+
+    `downloads` here come from App Store Analytics and need not equal the units in Sales and
+    Trends (different time zones and rules); label them by source when showing both.
+    """
+
+    app_id: str
+    day: date
+    territory: str
+    impressions: int = Field(ge=0)
+    product_page_views: int = Field(ge=0)
+    downloads: int = Field(ge=0)
+
+
+class DateCoverage(Entity):
+    """Days the source has published. Apple generates reports with a delay and may keep only
+    a limited window, so a day without rows means "no activity" only inside this range."""
+
+    first_day: date | None = None
+    last_day: date | None = None
+
+    def covers(self, start: date, end: date) -> bool:
+        return (
+            self.first_day is not None
+            and self.last_day is not None
+            and self.first_day <= start
+            and end <= self.last_day
+        )
+
+
 class App(Entity):
     id: str
     name: str

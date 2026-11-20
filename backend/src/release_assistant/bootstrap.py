@@ -14,6 +14,7 @@ from release_assistant.application import reviews, testers
 from release_assistant.application.analytics import AnalyticsService
 from release_assistant.application.apps import AppsService
 from release_assistant.application.builds import BuildsService
+from release_assistant.application.engagement import EngagementService
 from release_assistant.application.pending import PendingAction, PendingActionStore
 from release_assistant.application.policy import ConfirmationPolicy
 from release_assistant.application.reviews import ReviewsService
@@ -54,6 +55,7 @@ class Application:
     builds: BuildsService
     testers: BetaTesterService
     analytics: AnalyticsService
+    engagement: EngagementService
     actions: ActionService
     _gateway: AppStoreGateway
 
@@ -94,6 +96,7 @@ def build_application(
         builds=BuildsService(gateway),
         testers=BetaTesterService(gateway),
         analytics=AnalyticsService(gateway, gateway),
+        engagement=EngagementService(gateway, gateway),
         actions=actions,
         _gateway=gateway,
     )

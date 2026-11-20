@@ -12,6 +12,8 @@ from release_assistant.domain.entities import (
     Build,
     BuildProcessingState,
     CustomerReview,
+    DateCoverage,
+    EngagementRow,
     SalesKind,
     SalesRow,
 )
@@ -53,6 +55,31 @@ def _sample_sales() -> list[SalesRow]:
         row("app-1", date(2026, 11, 14), "USA", u, 250, "0", "USD"),
         row("app-2", date(2026, 11, 18), "GBR", d, 60, "0", "GBP"),
         row("app-2", date(2026, 11, 18), "GBR", i, 6, "15.00", "GBP"),
+    ]
+
+
+def _sample_engagement() -> list[EngagementRow]:
+    """Sparse on purpose: a day with no row means no activity, inside the published range
+    (2026-10-17 to 2026-11-18, two days behind the fixture's "today")."""
+
+    def row(app_id: str, day: date, territory: str, imp: int, views: int, dl: int) -> EngagementRow:
+        return EngagementRow(
+            app_id=app_id,
+            day=day,
+            territory=territory,
+            impressions=imp,
+            product_page_views=views,
+            downloads=dl,
+        )
+
+    return [
+        row("app-1", date(2026, 10, 25), "USA", 7000, 600, 100),
+        row("app-1", date(2026, 10, 28), "DEU", 3000, 200, 20),
+        row("app-2", date(2026, 10, 30), "GBR", 1000, 80, 10),
+        row("app-1", date(2026, 11, 5), "USA", 10000, 800, 150),
+        row("app-1", date(2026, 11, 9), "DEU", 4000, 300, 30),
+        row("app-2", date(2026, 11, 10), "GBR", 2000, 100, 20),
+        row("app-1", date(2026, 11, 12), "USA", 6000, 500, 90),
     ]
 
 
@@ -119,6 +146,8 @@ def sample_gateway() -> MockAppStoreGateway:
         ],
         memberships={"group-1": ["tester-a"], "group-2": ["tester-a", "tester-b"]},
         sales=_sample_sales(),
+        engagement=_sample_engagement(),
+        engagement_coverage=DateCoverage(first_day=date(2026, 10, 17), last_day=date(2026, 11, 18)),
         reviews=[
             CustomerReview(
                 id="review-1",

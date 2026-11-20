@@ -15,6 +15,8 @@ from release_assistant.domain.entities import (
     BetaTester,
     Build,
     CustomerReview,
+    DateCoverage,
+    EngagementRow,
     ReviewResponse,
     ReviewResponseState,
     SalesRow,
@@ -40,6 +42,8 @@ class MockAppStoreGateway:
         memberships: dict[str, list[str]] | None = None,
         reviews: Iterable[CustomerReview] = (),
         sales: Iterable[SalesRow] = (),
+        engagement: Iterable[EngagementRow] = (),
+        engagement_coverage: DateCoverage | None = None,
     ) -> None:
         self._apps = {a.id: a for a in apps}
         self._builds = list(builds)
@@ -49,6 +53,8 @@ class MockAppStoreGateway:
         self._memberships = {gid: list(ids) for gid, ids in (memberships or {}).items()}
         self._reviews = {r.id: r for r in reviews}
         self._sales = list(sales)
+        self._engagement = list(engagement)
+        self._engagement_coverage = engagement_coverage
         self._sequence = 0
 
     def _next_id(self, prefix: str) -> str:
@@ -120,6 +126,16 @@ class MockAppStoreGateway:
 
     async def list_sales(self, start: date, end: date) -> list[SalesRow]:
         rows = [r for r in self._sales if start <= r.day <= end]
+        return sorted(rows, key=lambda r: r.day)
+
+    async def engagement_coverage(self) -> DateCoverage:
+        if self._engagement_coverage is not None:
+            return self._engagement_coverage
+        days = [r.day for r in self._engagement]
+        return DateCoverage(first_day=min(days, default=None), last_day=max(days, default=None))
+
+    async def list_engagement(self, start: date, end: date) -> list[EngagementRow]:
+        rows = [r for r in self._engagement if start <= r.day <= end]
         return sorted(rows, key=lambda r: r.day)
 
     async def get_review(self, review_id: str) -> CustomerReview:
