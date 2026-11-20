@@ -2,22 +2,13 @@ import hashlib
 
 import pytest
 from fastapi.testclient import TestClient
+from pydantic import ValidationError
 
 from release_assistant.api.app import create_app
-from release_assistant.api.ratelimit import Rate, RateLimits, TokenBucketLimiter
+from release_assistant.api.errors import ApiError
+from release_assistant.api.ratelimit import RateLimits
 from release_assistant.bootstrap import build_mock_application
-from release_assistant.config import ApiClient, Scope, Settings
-
-# Refill so slow that tests never see a token come back by themselves.
-SLOW = 0.0001
-
-
-class Clock:
-    def __init__(self) -> None:
-        self.now = 1000.0
-
-    def __call__(self) -> float:
-        return self.now
+from release_assistant.config import RATE_LIMIT_DEFAULTS, ApiClient, Scope, Settings
 
 
 def bearer(key: str) -> dict[str, str]:
@@ -39,73 +30,79 @@ def make_client(**overrides: object) -> TestClient:
             api_client("agent", "agent-key", "read", "propose"),
             api_client("human", "human-key", "read", "propose"),
         ],
-        # Everything generous unless a test narrows the limit it is about.
-        "rate_limit_ip_per_second": 1000,
-        "rate_limit_ip_burst": 1000,
-        "rate_limit_principal_per_second": 1000,
-        "rate_limit_principal_burst": 1000,
         **overrides,
     }
     settings = Settings(**values)  # type: ignore[arg-type]
     return TestClient(create_app(settings, build_mock_application()))
 
 
-def test_bucket_allows_a_burst_then_says_how_long_to_wait() -> None:
-    limiter = TokenBucketLimiter(Rate(per_second=1, burst=3), clock=Clock())
-
-    assert [limiter.check("k") for _ in range(3)] == [None, None, None]
-    assert limiter.check("k") == pytest.approx(1.0)
+# --- the policy layer on its own -------------------------------------------------------
 
 
-def test_bucket_refills_with_time_but_never_beyond_the_burst() -> None:
-    clock = Clock()
-    limiter = TokenBucketLimiter(Rate(per_second=1, burst=2), clock=clock)
-    limiter.check("k")
-    limiter.check("k")
-    assert limiter.check("k") is not None
+async def test_a_policy_blocks_once_its_limit_is_used_and_says_when_to_retry() -> None:
+    limits = RateLimits(Settings(rate_limits={"login": "2/minute"}))
 
-    clock.now += 1
-    assert limiter.check("k") is None
-    assert limiter.check("k") is not None
+    await limits.enforce("login", "1.1.1.1")
+    await limits.enforce("login", "1.1.1.1")
+    with pytest.raises(ApiError) as blocked:
+        await limits.enforce("login", "1.1.1.1")
 
-    clock.now += 3600
-    assert [limiter.check("k") for _ in range(3)] == [None, None, pytest.approx(1.0)]
+    assert blocked.value.status_code == 429
+    assert blocked.value.code == "rate_limited"
+    assert 1 <= int((blocked.value.headers or {})["Retry-After"]) <= 60
 
 
-def test_buckets_are_independent_per_key() -> None:
-    limiter = TokenBucketLimiter(Rate(per_second=SLOW, burst=1), clock=Clock())
+async def test_keys_and_policies_are_counted_separately() -> None:
+    limits = RateLimits(Settings(rate_limits={"login": "1/minute", "propose": "1/minute"}))
 
-    assert limiter.check("a") is None
-    assert limiter.check("a") is not None
-    assert limiter.check("b") is None
-
-
-def test_the_number_of_tracked_keys_stays_bounded() -> None:
-    clock = Clock()
-    limiter = TokenBucketLimiter(Rate(per_second=1, burst=1), clock=clock, max_keys=3)
-
-    for key in ("a", "b", "c", "d", "e"):
-        limiter.check(key)
-        clock.now += 0.1
-
-    assert len(limiter._buckets) <= 3
+    await limits.enforce("login", "a")
+    await limits.enforce("login", "b")
+    await limits.enforce("propose", "a")
+    with pytest.raises(ApiError):
+        await limits.enforce("login", "a")
 
 
-@pytest.mark.parametrize(("per_second", "burst"), [(0, 1), (-1, 1), (1, 0)])
-def test_invalid_rates_are_rejected(per_second: float, burst: int) -> None:
-    with pytest.raises(ValueError, match="rate"):
-        Rate(per_second, burst)
+async def test_a_policy_can_combine_several_limits() -> None:
+    limits = RateLimits(Settings(rate_limits={"login": "10/second;2/minute"}))
+
+    await limits.enforce("login", "k")
+    await limits.enforce("login", "k")
+    with pytest.raises(ApiError):
+        await limits.enforce("login", "k")
 
 
-def test_disabled_limits_never_block() -> None:
-    limits = RateLimits(Settings(rate_limit_enabled=False, rate_limit_login_burst=1))
+async def test_disabled_limits_never_block() -> None:
+    limits = RateLimits(Settings(rate_limit_enabled=False, rate_limits={"login": "1/minute"}))
 
-    for _ in range(50):
-        limits.enforce("login", "1.1.1.1")
+    for _ in range(20):
+        await limits.enforce("login", "k")
+
+
+def test_overrides_replace_only_the_named_policies() -> None:
+    effective = Settings(rate_limits={"login": "3/minute"}).effective_rate_limits
+
+    assert effective["login"] == "3/minute"
+    assert effective["reports"] == RATE_LIMIT_DEFAULTS["reports"]
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        {"rate_limits": {"login": "three per minute"}},
+        {"rate_limits": {"no_such_policy": "3/minute"}},
+        {"rate_limit_storage": "memory://"},
+    ],
+)
+def test_bad_rate_limit_configuration_stops_startup(overrides: dict[str, object]) -> None:
+    with pytest.raises(ValidationError):
+        Settings(**overrides)  # type: ignore[arg-type]
+
+
+# --- limits applied to routes ----------------------------------------------------------
 
 
 def test_the_address_limit_returns_429_with_retry_after_and_a_request_id() -> None:
-    client = make_client(rate_limit_ip_burst=3, rate_limit_ip_per_second=SLOW)
+    client = make_client(rate_limits={"ip": "3/minute"})
 
     codes = [client.get("/v1/apps", headers=bearer("agent-key")).status_code for _ in range(4)]
     blocked = client.get("/v1/apps", headers=bearer("agent-key"))
@@ -118,7 +115,7 @@ def test_the_address_limit_returns_429_with_retry_after_and_a_request_id() -> No
 
 
 def test_the_address_limit_applies_before_authentication() -> None:
-    client = make_client(rate_limit_ip_burst=2, rate_limit_ip_per_second=SLOW)
+    client = make_client(rate_limits={"ip": "2/minute"})
 
     statuses = [client.get("/v1/apps").status_code for _ in range(3)]
 
@@ -126,13 +123,13 @@ def test_the_address_limit_applies_before_authentication() -> None:
 
 
 def test_the_liveness_probe_is_never_limited() -> None:
-    client = make_client(rate_limit_ip_burst=1, rate_limit_ip_per_second=SLOW)
+    client = make_client(rate_limits={"ip": "1/minute"})
 
     assert {client.get("/healthz").status_code for _ in range(20)} == {200}
 
 
 def test_principals_are_limited_separately() -> None:
-    client = make_client(rate_limit_principal_burst=2, rate_limit_principal_per_second=SLOW)
+    client = make_client(rate_limits={"principal": "2/minute"})
 
     agent = [client.get("/v1/apps", headers=bearer("agent-key")).status_code for _ in range(3)]
     human = client.get("/v1/apps", headers=bearer("human-key")).status_code
@@ -142,18 +139,46 @@ def test_principals_are_limited_separately() -> None:
 
 
 def test_login_attempts_are_limited_before_any_password_is_checked() -> None:
-    client = make_client(rate_limit_login_burst=2, rate_limit_login_per_minute=0.01)
+    client = make_client(rate_limits={"login": "2/minute"})
     body = {"username": "alice", "password": "whatever"}
 
     statuses = [client.post("/v1/auth/login", json=body).status_code for _ in range(3)]
-    third = client.post("/v1/auth/login", json=body)
 
     assert statuses == [401, 401, 429]
-    assert third.json()["code"] == "rate_limited"
+    assert client.post("/v1/auth/login", json=body).json()["code"] == "rate_limited"
 
 
-def test_proposals_have_their_own_tighter_limit() -> None:
-    client = make_client(rate_limit_propose_burst=2, rate_limit_propose_per_minute=0.01)
+def test_reports_have_their_own_limit_that_leaves_other_routes_alone() -> None:
+    client = make_client(rate_limits={"reports": "2/minute"})
+    agent = bearer("agent-key")
+    params = {"year": 2026, "month": 10}
+
+    reports = [
+        client.get("/v1/reports/sales/monthly", params=params, headers=agent).status_code
+        for _ in range(3)
+    ]
+
+    assert reports == [200, 200, 429]
+    assert client.get("/v1/apps", headers=agent).status_code == 200
+
+
+def test_every_report_route_shares_the_reports_limit() -> None:
+    client = make_client(rate_limits={"reports": "2/minute"})
+    agent = bearer("agent-key")
+
+    first = client.get(
+        "/v1/reports/sales/monthly", params={"year": 2026, "month": 10}, headers=agent
+    )
+    second = client.get("/v1/reports/engagement/recent", headers=agent)
+    third = client.get(
+        "/v1/reports/engagement", params={"start": "2026-11-01", "end": "2026-11-14"}, headers=agent
+    )
+
+    assert (first.status_code, second.status_code, third.status_code) == (200, 200, 429)
+
+
+def test_proposals_have_their_own_limit() -> None:
+    client = make_client(rate_limits={"propose": "2/minute"})
     agent = bearer("agent-key")
     session_id = client.post("/v1/sessions", headers=agent).json()["session_id"]
     body = {
@@ -170,14 +195,26 @@ def test_proposals_have_their_own_tighter_limit() -> None:
     assert client.get("/v1/apps", headers=agent).status_code == 200
 
 
+def test_review_reads_have_their_own_limit() -> None:
+    client = make_client(rate_limits={"reviews": "2/minute"})
+    agent = bearer("agent-key")
+    session_id = client.post("/v1/sessions", headers=agent).json()["session_id"]
+    url = f"/v1/sessions/{session_id}/apps/app-1/reviews"
+
+    statuses = [client.get(url, headers=agent).status_code for _ in range(3)]
+
+    assert statuses == [200, 200, 429]
+
+
 def test_limits_can_be_switched_off() -> None:
-    client = make_client(
-        rate_limit_enabled=False, rate_limit_ip_burst=1, rate_limit_ip_per_second=SLOW
-    )
+    client = make_client(rate_limit_enabled=False, rate_limits={"ip": "1/minute"})
 
     assert {client.get("/v1/apps", headers=bearer("agent-key")).status_code for _ in range(10)} == {
         200
     }
+
+
+# --- request size cap ------------------------------------------------------------------
 
 
 def test_a_declared_oversized_body_is_refused() -> None:

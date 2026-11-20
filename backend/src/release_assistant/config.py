@@ -8,10 +8,25 @@ from typing import Literal
 
 from argon2 import extract_parameters
 from argon2.exceptions import InvalidHashError
+from limits import parse_many
 from pydantic import BaseModel, Field, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 Scope = Literal["read", "propose", "confirm:button", "confirm:voice"]
+
+RateLimitPolicy = Literal["ip", "principal", "login", "propose", "reports", "reviews"]
+
+# What each policy limits: `ip` every request from one address, `principal` every
+# authenticated call by one caller, `login` password attempts per address, `propose` action
+# proposals per caller, `reports` analytics reads per caller, `reviews` review reads per caller.
+RATE_LIMIT_DEFAULTS: dict[RateLimitPolicy, str] = {
+    "ip": "20/second",
+    "principal": "20/second",
+    "login": "10/minute",
+    "propose": "30/minute",
+    "reports": "20/minute",
+    "reviews": "60/minute",
+}
 
 
 class ApiClient(BaseModel):
@@ -46,10 +61,13 @@ class Settings(BaseSettings):
         trusted_proxies: Comma-separated addresses whose `X-Forwarded-For` is believed, so the
             real client address is used for limits and lockouts. Set to the reverse proxy.
         max_request_bytes: Largest request body accepted.
-        rate_limit_*: Token-bucket limits (ADR 0006): `per_second` or `per_minute` is the
-            steady rate, `burst` the allowance for short spikes. `ip` covers every request
-            from one address, `principal` each authenticated caller, `login` password
-            attempts per address, `propose` action proposals per caller.
+        rate_limit_enabled: Master switch for rate limiting (ADR 0006).
+        rate_limit_storage: Where counters live, as a `limits` storage URI with an `async+`
+            prefix: `async+memory://` (one process) or `async+redis://host:6379` (shared by
+            several instances; needs `uv add "limits[async-redis]"`).
+        rate_limits: Overrides for the default limits, by policy name, written as
+            "10/minute" or several joined by ";" ("20/second;600/minute"). Policies are in
+            `RATE_LIMIT_DEFAULTS`.
         backend: Which App Store Connect implementation to use. Only the mock exists so far.
         api_clients: Static API keys (for the agent), as a JSON list in the environment.
         admin_username: The human account; also the owner every credential must share.
@@ -75,19 +93,30 @@ class Settings(BaseSettings):
     trusted_proxies: str = "127.0.0.1"
     max_request_bytes: int = Field(default=65_536, ge=1024)
     rate_limit_enabled: bool = True
-    rate_limit_ip_per_second: float = Field(default=10, gt=0)
-    rate_limit_ip_burst: int = Field(default=30, ge=1)
-    rate_limit_principal_per_second: float = Field(default=10, gt=0)
-    rate_limit_principal_burst: int = Field(default=30, ge=1)
-    rate_limit_login_per_minute: float = Field(default=10, gt=0)
-    rate_limit_login_burst: int = Field(default=5, ge=1)
-    rate_limit_propose_per_minute: float = Field(default=30, gt=0)
-    rate_limit_propose_burst: int = Field(default=10, ge=1)
+    rate_limit_storage: str = "async+memory://"
+    rate_limits: dict[RateLimitPolicy, str] = {}
     admin_username: str | None = Field(default=None, min_length=1, max_length=64)
     admin_password_hash: SecretStr | None = None
     access_token_ttl_minutes: int = Field(default=480, ge=1, le=1440)
     login_max_failures: int = Field(default=5, ge=1, le=100)
     login_lockout_minutes: int = Field(default=15, ge=1, le=1440)
+
+    @property
+    def effective_rate_limits(self) -> dict[RateLimitPolicy, str]:
+        """Defaults with the configured overrides applied."""
+        return {**RATE_LIMIT_DEFAULTS, **self.rate_limits}
+
+    @model_validator(mode="after")
+    def _validate_rate_limits(self) -> "Settings":
+        """Fail at startup, not at the first request, on a limit nobody can parse."""
+        if not self.rate_limit_storage.startswith("async+"):
+            raise ValueError("rate_limit_storage must be an async storage URI (async+...)")
+        for policy, spec in self.rate_limits.items():
+            try:
+                parse_many(spec)
+            except ValueError as error:
+                raise ValueError(f"rate_limits[{policy}]: {error}") from error
+        return self
 
     @model_validator(mode="after")
     def _validate_admin(self) -> "Settings":

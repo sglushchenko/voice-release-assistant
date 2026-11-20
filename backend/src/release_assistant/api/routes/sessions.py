@@ -11,7 +11,8 @@ from fastapi import APIRouter, Depends, Query, Response
 from pydantic import BaseModel, ConfigDict, Field
 
 from release_assistant.api.auth import Principal
-from release_assistant.api.deps import ApplicationDep, LimitsDep, require_scope
+from release_assistant.api.deps import ApplicationDep, require_scope
+from release_assistant.api.deps import limit as rate_limit
 from release_assistant.application.pending import PendingAction
 from release_assistant.application.service import Executed
 from release_assistant.domain.entities import CustomerReview
@@ -57,7 +58,7 @@ async def create_session(application: ApplicationDep, principal: ReadPrincipal) 
     return SessionCreated(session_id=session_id)
 
 
-@router.get("/{session_id}/apps/{app_id}/reviews")
+@router.get("/{session_id}/apps/{app_id}/reviews", dependencies=[Depends(rate_limit("reviews"))])
 async def list_reviews(
     session_id: str,
     app_id: str,
@@ -74,7 +75,9 @@ async def list_reviews(
     return ReviewsResponse(reviews=reviews)
 
 
-@router.get("/{session_id}/apps/{app_id}/reviews/unanswered")
+@router.get(
+    "/{session_id}/apps/{app_id}/reviews/unanswered", dependencies=[Depends(rate_limit("reviews"))]
+)
 async def unanswered_reviews(
     session_id: str,
     app_id: str,
@@ -86,18 +89,18 @@ async def unanswered_reviews(
     return ReviewsResponse(reviews=await session.reviews.unanswered(app_id, max_rating=max_rating))
 
 
-@router.post("/{session_id}/actions", status_code=200)
+@router.post(
+    "/{session_id}/actions", status_code=200, dependencies=[Depends(rate_limit("propose"))]
+)
 async def propose_action(
     session_id: str,
     body: ProposeRequest,
     application: ApplicationDep,
     principal: ProposePrincipal,
     response: Response,
-    limits: LimitsDep,
 ) -> ActionOutcome:
     """Propose a write. The reply is 202 with `pending` when a person must confirm. Each
     proposal creates state and audit records, so it has its own, tighter limit."""
-    limits.enforce("propose", principal.subject)
     session = application.sessions.get(session_id, principal.owner)
     outcome = await session.propose(body.action, body.arguments)
     if isinstance(outcome, Executed):

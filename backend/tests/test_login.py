@@ -49,7 +49,7 @@ def settings(**overrides: object) -> Settings:
         "admin_password_hash": HASH,
         "api_clients": [agent],
         # High enough that these tests exercise the lockout, not the request rate limit.
-        "rate_limit_login_burst": 100,
+        "rate_limits": {"login": "1000/minute"},
         **overrides,
     }
     return Settings(**values)  # type: ignore[arg-type]

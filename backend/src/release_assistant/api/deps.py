@@ -1,7 +1,7 @@
 """FastAPI dependencies: the application, the caller and scope checks."""
 
 from collections.abc import Awaitable, Callable
-from typing import Annotated
+from typing import Annotated, Literal
 
 import structlog
 from fastapi import Depends, Request
@@ -10,8 +10,9 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from release_assistant.api.auth import Principal
 from release_assistant.api.errors import ApiError
 from release_assistant.api.login import AuthService
-from release_assistant.api.ratelimit import RateLimits
+from release_assistant.api.ratelimit import client_address
 from release_assistant.bootstrap import Application
+from release_assistant.config import RateLimitPolicy
 
 log = structlog.get_logger(__name__)
 bearer_scheme = HTTPBearer(auto_error=False)
@@ -48,18 +49,31 @@ async def get_principal(
         raise ApiError(401, "unauthorized", "Invalid bearer token", _UNAUTHORIZED)
     structlog.contextvars.bind_contextvars(subject=principal.subject, owner=principal.owner)
     request.state.subject = principal.subject
-    request.app.state.limits.enforce("principal", principal.subject)
+    await request.app.state.limits.enforce("principal", principal.subject)
     return principal
 
 
-def get_limits(request: Request) -> RateLimits:
-    return request.app.state.limits
-
-
-LimitsDep = Annotated[RateLimits, Depends(get_limits)]
-
-
 PrincipalDep = Annotated[Principal, Depends(get_principal)]
+
+
+def limit(
+    policy: RateLimitPolicy, *, by: Literal["address", "principal"] = "principal"
+) -> Callable[..., Awaitable[None]]:
+    """Route dependency applying a named rate-limit policy.
+
+        @router.get("/x", dependencies=[Depends(limit("reports"))])
+
+    Keyed by principal (the default) it runs after authentication; `by="address"` suits
+    routes that are reached before there is a caller, such as login.
+    """
+
+    async def by_address(request: Request) -> None:
+        await request.app.state.limits.enforce(policy, client_address(request))
+
+    async def by_principal(request: Request, principal: PrincipalDep) -> None:
+        await request.app.state.limits.enforce(policy, principal.subject)
+
+    return by_address if by == "address" else by_principal
 
 
 def ensure_scope(principal: Principal, *scopes: str) -> None:

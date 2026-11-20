@@ -5,13 +5,15 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query
 
-from release_assistant.api.deps import ApplicationDep, require_scope
+from release_assistant.api.deps import ApplicationDep, limit, require_scope
 from release_assistant.api.errors import ApiError
 from release_assistant.application.analytics import MonthlyReport
 from release_assistant.application.engagement import EngagementReport
 
 router = APIRouter(
-    prefix="/v1/reports", dependencies=[Depends(require_scope("read"))], tags=["reports"]
+    prefix="/v1/reports",
+    dependencies=[Depends(require_scope("read")), Depends(limit("reports"))],
+    tags=["reports"],
 )
 
 _MAX_PERIOD_DAYS = 366
