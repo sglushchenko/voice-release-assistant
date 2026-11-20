@@ -63,6 +63,12 @@ def sample_gateway() -> MockAppStoreGateway:
                 version_string="1.9.2",
                 state=AppStoreVersionState.READY_FOR_SALE,
             ),
+            AppStoreVersion(
+                id="ver-3",
+                app_id="app-2",
+                version_string="2.0.0",
+                state=AppStoreVersionState.REJECTED,
+            ),
         ],
         groups=[
             BetaGroup(id="group-1", app_id="app-1", name="Internal"),
