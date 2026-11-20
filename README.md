@@ -14,7 +14,8 @@ The project is also a hands-on comparison of two voice-agent platforms, **Eleven
 | Backend API (auth, reads, confirmed writes, analytics) | **Done**, 230+ tests, coverage floor of 90% enforced in CI |
 | App Store Connect data | **Mock only.** A real adapter is not written yet; the code runs against in-memory sample data |
 | State (sessions, pending actions, rate-limit counters) | In memory: lost on restart, single process |
-| LLM agent layer, voice (ElevenLabs / OpenAI), iOS client | Planned |
+| Agent core: provider-neutral loop, tool table, limits, scripted model, injection scenario in CI | **Done**, no real model attached yet |
+| Real model adapters, voice (ElevenLabs / OpenAI), iOS client | Planned |
 
 Nothing here talks to Apple yet. Treat the API as a complete, tested contract over mock data.
 
@@ -64,6 +65,7 @@ How strictly an action is approved depends on its risk tier (read, reversible, p
 | `backend/src/release_assistant/application/` | Services per area (apps, builds, testers, reviews, sales, engagement), risk and confirmation policy, sessions, trust tracking |
 | `backend/src/release_assistant/infrastructure/` | In-memory App Store Connect gateway and fixtures, pending-action store |
 | `backend/src/release_assistant/api/` | FastAPI app: routes, authentication, rate limiting, middleware |
+| `backend/src/release_assistant/agent/` | Agent core: loop, tool table, HTTP tool backend, conversation store, scripted model |
 | `backend/src/release_assistant/observability/` | Structured logging setup |
 | `docs/adr/` | Architecture Decision Records |
 | `docs/openapi.json` | The API contract, checked by a test |
@@ -205,7 +207,7 @@ Adding a capability follows the layers: define or extend a port in `domain/ports
 
 1. A real App Store Connect adapter (JWT signing with the team's private key, real reports), behind the same ports.
 2. Persistence for sessions and pending actions.
-3. An LLM agent layer with tools over this API, with evaluations: tool-call accuracy, trajectories, and a suite of injection attacks.
+3. Real model adapters for the agent core, with evaluations: tool-call accuracy, trajectories, and a suite of injection attacks.
 4. Voice: ElevenLabs and OpenAI integrated at several levels of control, with measured latency, cost and quality.
 5. A SwiftUI client.
 
@@ -219,6 +221,7 @@ Adding a capability follows the layers: define or extend a port in `domain/ports
 | [0004](docs/adr/0004-http-api-authentication-and-authority.md) | Scoped credentials decide who may confirm what |
 | [0005](docs/adr/0005-single-operator-authentication.md) | Single-operator authentication: password login, keys for the agent |
 | [0006](docs/adr/0006-abuse-protection.md) | Rate limits and request size cap |
+| [0007](docs/adr/0007-server-side-agent-core.md) | A provider-neutral agent core on the server |
 
 ## License
 

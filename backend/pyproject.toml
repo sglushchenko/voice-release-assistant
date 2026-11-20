@@ -8,6 +8,7 @@ license-files = ["../LICENSE"]
 dependencies = [
     "argon2-cffi>=25.1.0",
     "fastapi>=0.165.0",
+    "httpx>=0.28.1",
     "limits>=5.8.0",
     "pydantic>=2.9",
     "pydantic-settings>=2.6",
@@ -21,7 +22,6 @@ release-assistant-hash-password = "release_assistant.api.main:hash_password"
 
 [dependency-groups]
 dev = [
-    "httpx>=0.28.1",
     "mypy>=2.4.1",
     "pytest>=8.3",
     "pytest-asyncio>=0.24",
