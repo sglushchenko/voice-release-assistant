@@ -4,6 +4,7 @@ Variables use the `RELEASE_ASSISTANT_` prefix and may also come from a local `.e
 which is git-ignored. See `.env.example` for the full list.
 """
 
+import re
 from typing import Literal
 
 from argon2 import extract_parameters
@@ -13,6 +14,8 @@ from pydantic import BaseModel, Field, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 Scope = Literal["read", "propose", "confirm:button", "confirm:voice"]
+
+_ORIGIN = re.compile(r"https?://[A-Za-z0-9.-]+(:[0-9]{1,5})?")
 
 RateLimitPolicy = Literal["ip", "principal", "login", "propose", "reports", "reviews"]
 
@@ -61,6 +64,12 @@ class Settings(BaseSettings):
         trusted_proxies: Comma-separated addresses whose `X-Forwarded-For` is believed, so the
             real client address is used for limits and lockouts. Set to the reverse proxy.
         max_request_bytes: Largest request body accepted.
+        docs_enabled: Serve interactive docs at `/docs` and the schema at `/openapi.json`.
+            Off by default: they describe the whole attack surface to anonymous visitors.
+            The committed `docs/openapi.json` is the contract for client developers.
+        cors_origins: Browser origins allowed to call the API, as a JSON list of exact
+            origins such as `["https://app.example.com"]`. Empty (default) allows none,
+            which is right for native clients. `*` is refused on purpose.
         rate_limit_enabled: Master switch for rate limiting (ADR 0006).
         rate_limit_storage: Where counters live, as a `limits` storage URI with an `async+`
             prefix: `async+memory://` (one process) or `async+redis://host:6379` (shared by
@@ -92,6 +101,8 @@ class Settings(BaseSettings):
     api_clients: list[ApiClient] = []
     trusted_proxies: str = "127.0.0.1"
     max_request_bytes: int = Field(default=65_536, ge=1024)
+    docs_enabled: bool = False
+    cors_origins: list[str] = []
     rate_limit_enabled: bool = True
     rate_limit_storage: str = "async+memory://"
     rate_limits: dict[RateLimitPolicy, str] = {}
@@ -105,6 +116,17 @@ class Settings(BaseSettings):
     def effective_rate_limits(self) -> dict[RateLimitPolicy, str]:
         """Defaults with the configured overrides applied."""
         return {**RATE_LIMIT_DEFAULTS, **self.rate_limits}
+
+    @model_validator(mode="after")
+    def _validate_cors_origins(self) -> "Settings":
+        """Only exact origins: a wildcard or a path would silently widen browser access."""
+        for origin in self.cors_origins:
+            if not _ORIGIN.fullmatch(origin):
+                raise ValueError(
+                    f"cors_origins entry {origin!r} must be an exact origin like "
+                    "https://app.example.com (no wildcard, path or trailing slash)"
+                )
+        return self
 
     @model_validator(mode="after")
     def _validate_rate_limits(self) -> "Settings":

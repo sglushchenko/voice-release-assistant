@@ -10,7 +10,7 @@ import structlog
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
-from pydantic import ValidationError
+from pydantic import BaseModel, ValidationError
 
 from release_assistant.application.errors import (
     ActionExpiredError,
@@ -36,6 +36,16 @@ _DOMAIN_STATUS: tuple[tuple[type[DomainError], int, str], ...] = (
     (TooManySessionsError, 429, "too_many_sessions"),
     (DataUnavailableError, 503, "data_unavailable"),
 )
+
+
+class Problem(BaseModel):
+    """The body of every error response (problem-details shape). Exists so the API contract
+    describes errors, letting generated clients decode them."""
+
+    title: str
+    status: int
+    code: str
+    detail: str
 
 
 class ApiError(Exception):

@@ -1,4 +1,4 @@
-.PHONY: install check lint format typecheck test run
+.PHONY: install check lint format typecheck test openapi run
 
 install:  ## Install dependencies from the lock file
 	uv sync --frozen
@@ -18,6 +18,9 @@ typecheck:  ## Strict type checking of the source
 
 test:  ## Tests with a coverage floor
 	uv run pytest --cov
+
+openapi:  ## Regenerate the committed API contract (docs/openapi.json)
+	uv run python -m release_assistant.api.openapi_export ../docs/openapi.json
 
 run:  ## Start the API server (reads .env)
 	uv run release-assistant

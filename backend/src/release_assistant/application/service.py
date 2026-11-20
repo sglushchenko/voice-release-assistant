@@ -101,7 +101,7 @@ class ActionService:
             expires_at=now + self._ttl,
         )
         await self._store.add(pending)
-        log.info("action.proposed", action_id=pending.id, action=name, mode=mode.name)
+        log.info("action.proposed", action_id=pending.id, action=name, mode=mode.value)
         if mode is ApprovalMode.IMPLICIT_IF_CLEAR:
             return await self._execute(definition, pending, channel=None)
         return pending
@@ -138,11 +138,11 @@ class ActionService:
             log.warning(
                 "action.channel_denied",
                 action_id=action_id,
-                mode=pending.mode.name,
+                mode=pending.mode.value,
                 channel=channel.value,
             )
             raise ChannelNotAllowedError(
-                f"{pending.mode.name} does not accept confirmation via {channel.value}"
+                f"{pending.mode.value} does not accept confirmation via {channel.value}"
             )
         return await self._execute(self._definition(pending.action), pending, channel)
 

@@ -1,7 +1,7 @@
 """Vocabulary for classifying actions and deciding how they may be approved (ADR 0002)."""
 
 from dataclasses import dataclass
-from enum import IntEnum, StrEnum
+from enum import StrEnum
 
 
 class RiskTier(StrEnum):
@@ -13,12 +13,20 @@ class RiskTier(StrEnum):
     IRREVERSIBLE = "irreversible"
 
 
-class ApprovalMode(IntEnum):
-    """How an action may be approved. A higher value is stricter, so `max()` tightens."""
+class ApprovalMode(StrEnum):
+    """How an action may be approved, from least to most strict (the order of definition).
 
-    IMPLICIT_IF_CLEAR = 0
-    VOICE_OR_BUTTON = 1
-    BUTTON_ONLY = 2
+    Values are what clients see in the API; `strictness` is what the policy compares.
+    """
+
+    IMPLICIT_IF_CLEAR = "implicit_if_clear"
+    VOICE_OR_BUTTON = "voice_or_button"
+    BUTTON_ONLY = "button_only"
+
+    @property
+    def strictness(self) -> int:
+        """0 for the most permissive mode, higher for stricter ones."""
+        return list(type(self)).index(self)
 
 
 class ConfirmationChannel(StrEnum):

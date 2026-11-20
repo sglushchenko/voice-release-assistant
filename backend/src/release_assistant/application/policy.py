@@ -53,7 +53,7 @@ class ConfirmationPolicy:
     ) -> ApprovalMode:
         """Resolve the mode at proposal time; the result is stored with the pending action."""
         configured = self._modes.get(spec.name, self._default)
-        mode = max(configured, _TIER_FLOOR[spec.tier])
+        mode = max(configured, _TIER_FLOOR[spec.tier], key=lambda m: m.strictness)
         if context is not None and context.untrusted_content_seen:
             return ApprovalMode.BUTTON_ONLY
         return mode
@@ -63,4 +63,4 @@ class ConfirmationPolicy:
         """Whether a confirmation from `channel` satisfies `mode`."""
         if channel is ConfirmationChannel.BUTTON:
             return True
-        return mode <= ApprovalMode.VOICE_OR_BUTTON
+        return mode.strictness <= ApprovalMode.VOICE_OR_BUTTON.strictness

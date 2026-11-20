@@ -4,8 +4,6 @@ from datetime import datetime
 from enum import StrEnum
 from typing import Any, Protocol
 
-from pydantic import field_serializer
-
 from release_assistant.application.risk import ApprovalMode, ConfirmationChannel, RiskTier
 from release_assistant.domain.entities import Entity
 
@@ -37,11 +35,6 @@ class PendingAction(Entity):
     expires_at: datetime
     status: PendingStatus = PendingStatus.PENDING
     confirmed_via: ConfirmationChannel | None = None
-
-    @field_serializer("mode")
-    def _mode_name(self, mode: ApprovalMode) -> str:
-        """Clients see "button_only", not the integer the policy orders modes by."""
-        return mode.name.lower()
 
 
 class PendingActionStore(Protocol):
