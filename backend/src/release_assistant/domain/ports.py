@@ -21,16 +21,21 @@ from release_assistant.domain.entities import (
 
 @runtime_checkable
 class AppCatalog(Protocol):
-    """Read-only view of apps, their builds and store versions."""
+    """Read-only view of apps and their store versions."""
 
     async def list_apps(self) -> list[App]: ...
 
-    async def list_builds(self, app_id: str) -> list[Build]:
-        """Newest first. Raises NotFoundError for an unknown app."""
-        ...
-
     async def list_versions(self, app_id: str) -> list[AppStoreVersion]:
         """Raises NotFoundError for an unknown app."""
+        ...
+
+
+@runtime_checkable
+class BuildCatalog(Protocol):
+    """Read-only view of uploaded builds."""
+
+    async def list_builds(self, app_id: str) -> list[Build]:
+        """Newest first. Raises NotFoundError for an unknown app."""
         ...
 
 

@@ -11,6 +11,7 @@ from release_assistant.infrastructure.fixtures import sample_gateway
 def test_mock_satisfies_every_port() -> None:
     gateway = sample_gateway()
     assert isinstance(gateway, ports.AppCatalog)
+    assert isinstance(gateway, ports.BuildCatalog)
     assert isinstance(gateway, ports.TesterDirectory)
     assert isinstance(gateway, ports.ReviewInbox)
 
