@@ -7,11 +7,12 @@ caller, answered in the API's error format.
 
 import math
 import time
+from collections.abc import Awaitable, Callable
 
 import structlog
 from fastapi import FastAPI, Request
 from fastapi.responses import Response
-from limits import parse_many
+from limits import RateLimitItem, parse_many
 from limits.aio.strategies import MovingWindowRateLimiter
 from limits.storage import storage_from_string
 
@@ -54,8 +55,8 @@ class RateLimits:
             if not await self._strategy.hit(item, policy, key):
                 await self._refuse(policy, key, item)
 
-    async def _refuse(self, policy: RateLimitPolicy, key: str, item: object) -> None:
-        stats = await self._strategy.get_window_stats(item, policy, key)  # type: ignore[arg-type]
+    async def _refuse(self, policy: RateLimitPolicy, key: str, item: RateLimitItem) -> None:
+        stats = await self._strategy.get_window_stats(item, policy, key)
         wait = max(1, math.ceil(stats.reset_time - time.time()))
         log.warning("rate.limited", policy=policy, key=key)
         raise ApiError(
@@ -73,7 +74,9 @@ def install_address_rate_limit(app: FastAPI) -> None:
     """Limit every request per client address before authentication or routing work."""
 
     @app.middleware("http")
-    async def address_rate_limit(request: Request, call_next) -> Response:  # type: ignore[no-untyped-def]
+    async def address_rate_limit(
+        request: Request, call_next: Callable[[Request], Awaitable[Response]]
+    ) -> Response:
         if request.url.path not in _EXEMPT_PATHS:
             try:
                 await request.app.state.limits.enforce("ip", client_address(request))

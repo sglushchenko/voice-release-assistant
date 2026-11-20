@@ -20,11 +20,13 @@ _UNAUTHORIZED = {"WWW-Authenticate": "Bearer"}
 
 
 def get_application(request: Request) -> Application:
-    return request.app.state.application
+    application: Application = request.app.state.application
+    return application
 
 
 def get_auth_service(request: Request) -> AuthService:
-    return request.app.state.auth
+    auth: AuthService = request.app.state.auth
+    return auth
 
 
 ApplicationDep = Annotated[Application, Depends(get_application)]
