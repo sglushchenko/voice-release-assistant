@@ -7,12 +7,13 @@ import structlog
 from fastapi import Depends, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
-from release_assistant.api.auth import Authenticator, Principal
+from release_assistant.api.auth import Principal
 from release_assistant.api.errors import ApiError
+from release_assistant.api.login import AuthService
 from release_assistant.bootstrap import Application
 
 log = structlog.get_logger(__name__)
-_bearer = HTTPBearer(auto_error=False)
+bearer_scheme = HTTPBearer(auto_error=False)
 _UNAUTHORIZED = {"WWW-Authenticate": "Bearer"}
 
 
@@ -20,17 +21,18 @@ def get_application(request: Request) -> Application:
     return request.app.state.application
 
 
-def get_authenticator(request: Request) -> Authenticator:
-    return request.app.state.authenticator
+def get_auth_service(request: Request) -> AuthService:
+    return request.app.state.auth
 
 
 ApplicationDep = Annotated[Application, Depends(get_application)]
+AuthDep = Annotated[AuthService, Depends(get_auth_service)]
 
 
 async def get_principal(
     request: Request,
-    authenticator: Annotated[Authenticator, Depends(get_authenticator)],
-    credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(_bearer)],
+    auth: AuthDep,
+    credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(bearer_scheme)],
 ) -> Principal:
     """Async on purpose: binding the subject to the log context must happen in the request's
     own task, not in a worker thread. The subject is also kept on `request.state`, which the
@@ -39,7 +41,7 @@ async def get_principal(
     if credentials is None:
         log.warning("auth.rejected", reason="missing_credentials")
         raise ApiError(401, "unauthorized", "Missing bearer token", _UNAUTHORIZED)
-    principal = authenticator.authenticate(credentials.credentials)
+    principal = auth.authenticate(credentials.credentials)
     if principal is None:
         log.warning("auth.rejected", reason="invalid_credentials")
         raise ApiError(401, "unauthorized", "Invalid bearer token", _UNAUTHORIZED)

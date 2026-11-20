@@ -3,30 +3,38 @@
 import structlog
 from fastapi import FastAPI
 
-from release_assistant.api.auth import Authenticator
 from release_assistant.api.errors import install_error_handlers
+from release_assistant.api.login import AuthService
 from release_assistant.api.middleware import install_request_context
-from release_assistant.api.routes import actions, catalog, reports, sessions, testers
+from release_assistant.api.routes import actions, auth, catalog, reports, sessions, testers
 from release_assistant.bootstrap import Application, build_mock_application
 from release_assistant.config import Settings
 
 log = structlog.get_logger(__name__)
 
 
-def create_app(settings: Settings, application: Application | None = None) -> FastAPI:
+def create_app(
+    settings: Settings,
+    application: Application | None = None,
+    *,
+    auth_service: AuthService | None = None,
+) -> FastAPI:
     """Build the API.
 
     Args:
         settings: Credentials and backend choice.
         application: Prebuilt application, mainly for tests. Defaults to the one `settings`
             selects.
+        auth_service: Prebuilt authentication, so tests can control the clock.
     """
     app = FastAPI(title="Voice Release Assistant", version="0.1.0")
     if application is None:
         log.warning("app.backend_selected", backend=settings.backend, note="mock data only")
         application = build_mock_application()
     app.state.application = application
-    app.state.authenticator = Authenticator(settings.api_clients)
+    app.state.auth = auth_service or AuthService(settings)
+    if not app.state.auth.login_enabled:
+        log.warning("app.login_disabled", note="set admin username and password hash to enable")
 
     install_request_context(app)
     install_error_handlers(app)
@@ -37,6 +45,7 @@ def create_app(settings: Settings, application: Application | None = None) -> Fa
         return {"status": "ok"}
 
     for router in (
+        auth.router,
         catalog.router,
         testers.router,
         reports.router,

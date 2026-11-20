@@ -1,6 +1,6 @@
 # 0004. HTTP API: scoped credentials decide who may confirm what
 
-Status: accepted
+Status: accepted. How credentials are issued is refined by [0005](0005-single-operator-authentication.md).
 
 ## Context
 ADR 0002 makes confirmation channel-based (`button`, `voice`) and ADR 0003 assumes a model can propose but never confirm. Over HTTP, "channel" is just a field in a request, so an agent that can call the API could claim `button`. The API must make that impossible by construction, and must tie pending actions to the user who proposed them.

@@ -1,10 +1,28 @@
 """Entry point for the server: `uv run release-assistant`."""
 
+import getpass
+import sys
+
 import uvicorn
 
 from release_assistant.api.app import create_app
+from release_assistant.api.login import make_password_hash
 from release_assistant.config import Settings
 from release_assistant.observability.logging import configure_logging
+
+_MIN_PASSWORD_LENGTH = 12
+
+
+def hash_password() -> None:
+    """`uv run release-assistant-hash-password`: prompt for a password and print its argon2id
+    hash for RELEASE_ASSISTANT_ADMIN_PASSWORD_HASH. Prompting (not an argument) keeps the
+    password out of shell history and process listings."""
+    password = getpass.getpass("Password: ")
+    if len(password) < _MIN_PASSWORD_LENGTH:
+        sys.exit(f"Use at least {_MIN_PASSWORD_LENGTH} characters")
+    if getpass.getpass("Repeat: ") != password:
+        sys.exit("Passwords do not match")
+    print(make_password_hash(password))
 
 
 def run() -> None:
