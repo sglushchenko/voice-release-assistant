@@ -12,7 +12,7 @@ The project is also a hands-on comparison of two voice-agent platforms, **Eleven
 | | |
 |---|---|
 | Backend API (auth, reads, confirmed writes, analytics) | **Done**, 230+ tests, coverage floor of 90% enforced in CI |
-| App Store Connect data | Mock by default. A **real read-only adapter** (apps, versions, builds, TestFlight, reviews) is selectable; writes and sales/engagement reports answer "not supported yet" ([ADR 0010](docs/adr/0010-real-app-store-connect-backend-read-only.md)) |
+| App Store Connect data | Mock by default. A **real read-only adapter** (apps, versions, builds, TestFlight, reviews, and sales/downloads with a vendor number) is selectable; writes and engagement analytics answer "not supported yet" ([ADR 0010](docs/adr/0010-real-app-store-connect-backend-read-only.md)) |
 | State (sessions, pending actions, rate-limit counters) | In memory: lost on restart, single process |
 | Agent core: provider-neutral loop, tool table, limits, scripted model, injection scenario in CI | **Done** |
 | OpenAI adapter for the agent | **Done**, tested without network; one opt-in live test (`make live`) |
@@ -195,6 +195,7 @@ All settings are environment variables with the prefix `RELEASE_ASSISTANT_` (or 
 | `OPENAI_MAX_OUTPUT_TOKENS`, `OPENAI_TIMEOUT_SECONDS`, `OPENAI_BASE_URL` | `2000`, `30`, unset | Reply ceiling, provider timeout, and an optional OpenAI-compatible server |
 | `BACKEND` | `mock` | `mock` or `appstoreconnect` (read-only); the latter also needs the three below |
 | `APPSTORE_KEY_ID`, `APPSTORE_ISSUER_ID`, `APPSTORE_PRIVATE_KEY_PATH` | unset | App Store Connect API key; the `.p8` is a **secret** kept outside the repo with owner-only permissions |
+| `APPSTORE_VENDOR_NUMBER` | unset | Digits from Payments and Financial Reports; enables real sales and downloads (the key needs a Sales-capable role) |
 | `APPSTORE_TIMEOUT_SECONDS` | `20` | Per-request timeout |
 | `TRUSTED_PROXIES` | `127.0.0.1` | Proxies whose `X-Forwarded-For` is believed |
 | `HOST`, `PORT` | `127.0.0.1`, `8000` | Bind address |
@@ -229,7 +230,7 @@ Adding a capability follows the layers: define or extend a port in `domain/ports
 
 ## Roadmap
 
-1. Real App Store Connect: reports (sales, engagement) and, behind an explicit switch, writes. Reading is done.
+1. Real App Store Connect: engagement analytics (impressions, page views) and, behind an explicit switch, writes. Reading, including sales and downloads, is done.
 2. Persistence for sessions and pending actions.
 3. Tracing with Langfuse, and a chat endpoint that exposes the agent.
 4. Voice: ElevenLabs and OpenAI integrated at several levels of control, with measured latency, cost and quality.
@@ -249,6 +250,7 @@ Adding a capability follows the layers: define or extend a port in `domain/ports
 | [0008](docs/adr/0008-openai-adapter-over-chat-completions.md) | The OpenAI adapter uses Chat Completions over the agent's own history |
 | [0009](docs/adr/0009-evaluation-tiers-and-history.md) | Evaluations in two tiers, with a history that shows progress |
 | [0010](docs/adr/0010-real-app-store-connect-backend-read-only.md) | The real App Store Connect backend starts read-only |
+| [0011](docs/adr/0011-sales-and-trends-and-deferred-analytics.md) | Sales and downloads from Sales and Trends; engagement analytics deferred until their format is observed |
 
 ## License
 

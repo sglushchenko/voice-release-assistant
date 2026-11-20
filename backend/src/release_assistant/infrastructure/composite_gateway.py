@@ -29,8 +29,8 @@ class UnsupportedReports:
     """Sales and engagement for a backend that has no reports yet. Every call says so plainly,
     which is what a person asking the assistant about revenue is told."""
 
-    def __init__(self, backend: str) -> None:
-        self._message = f"{backend} sales and engagement reports are not supported yet"
+    def __init__(self, backend: str, *, what: str = "sales and engagement reports") -> None:
+        self._message = f"{backend} {what} are not supported yet"
 
     async def list_sales(self, start: date, end: date) -> list[SalesRow]:
         raise NotSupportedError(self._message)

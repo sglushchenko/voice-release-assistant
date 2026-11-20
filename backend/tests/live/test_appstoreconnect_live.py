@@ -8,10 +8,12 @@ review text, tokens or the key.
 """
 
 import os
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
 from release_assistant.config import Settings
+from release_assistant.domain.entities import SalesKind
 from release_assistant.domain.errors import NotSupportedError
 from release_assistant.infrastructure.appstoreconnect.factory import create_appstoreconnect_gateway
 
@@ -45,5 +47,11 @@ async def test_the_real_account_can_be_read(
             f"groups={len(groups)} reviews={len(reviews)} "
             f"states={sorted({v.apple_state or '-' for v in versions})}"
         )
+    if settings.appstore_vendor_number:
+        today = datetime.now(UTC).date()
+        rows = await gateway.list_sales(today - timedelta(days=9), today - timedelta(days=2))
+        downloads = sum(r.units for r in rows if r.kind is SalesKind.DOWNLOAD)
+        with capsys.disabled():
+            print(f"sales rows={len(rows)} downloads={downloads}")
     with pytest.raises(NotSupportedError):
         await gateway.add_tester("any", "nobody@example.com")

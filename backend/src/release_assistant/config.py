@@ -101,6 +101,8 @@ class Settings(BaseSettings):
         appstore_issuer_id: The team's Issuer ID, shown on the same page.
         appstore_private_key_path: Path to the downloaded `AuthKey_<KeyID>.p8`. Keep it outside
             the repository with owner-only permissions; only the path is configuration.
+        appstore_vendor_number: Vendor number (Payments and Financial Reports), needed to read
+            sales and downloads. Unset leaves those answering "not supported yet".
         appstore_timeout_seconds: How long to wait for one App Store Connect request.
         api_clients: Static API keys (for the agent), as a JSON list in the environment.
         admin_username: The human account; also the owner every credential must share.
@@ -125,6 +127,7 @@ class Settings(BaseSettings):
     appstore_key_id: str | None = None
     appstore_issuer_id: str | None = None
     appstore_private_key_path: Path | None = None
+    appstore_vendor_number: str | None = Field(default=None, pattern=r"^\d{1,12}$")
     appstore_timeout_seconds: float = Field(default=20, gt=0, le=120)
     api_clients: list[ApiClient] = []
     trusted_proxies: str = "127.0.0.1"

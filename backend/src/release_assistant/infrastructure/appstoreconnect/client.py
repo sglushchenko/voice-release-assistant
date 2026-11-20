@@ -3,7 +3,7 @@
 import asyncio
 import time
 from collections.abc import Awaitable, Callable
-from typing import Any
+from typing import Any, NoReturn
 from urllib.parse import urlsplit
 
 import httpx
@@ -76,7 +76,18 @@ class AscClient:
             url, query = next_url, None  # the next link already carries the query
         return data, included
 
+    async def get_bytes(self, path: str, params: dict[str, Any] | None = None) -> bytes:
+        """A binary document (reports are gzip files, not JSON). Same retries and error
+        handling as `get`."""
+        response = await self._send(f"{BASE_URL}{path}", params)
+        if not response.is_success:
+            self._raise_for(response)
+        return response.content
+
     async def _request(self, url: str, params: dict[str, Any] | None) -> dict[str, Any]:
+        return self._parse(await self._send(url, params))
+
+    async def _send(self, url: str, params: dict[str, Any] | None) -> httpx.Response:
         for attempt in range(self._max_retries + 1):
             started = time.perf_counter()
             try:
@@ -102,7 +113,7 @@ class AscClient:
             if response.status_code in _RETRY_STATUSES and attempt < self._max_retries:
                 await self._sleep(self._backoff(attempt, response.headers.get("Retry-After")))
                 continue
-            return self._parse(response)
+            return response
         raise UpstreamError("App Store Connect did not answer")  # pragma: no cover
 
     @staticmethod
@@ -120,17 +131,20 @@ class AscClient:
         if remaining.isdigit() and int(remaining) < _LOW_QUOTA:
             log.warning("asc.quota_low", remaining=int(remaining))
 
-    @staticmethod
-    def _parse(response: httpx.Response) -> dict[str, Any]:
-        if response.is_success:
-            try:
-                document = response.json()
-            except ValueError:
-                raise UpstreamError("App Store Connect returned an unreadable response") from None
-            if not isinstance(document, dict):
-                raise UpstreamError("App Store Connect returned an unexpected response")
-            return document
+    @classmethod
+    def _parse(cls, response: httpx.Response) -> dict[str, Any]:
+        if not response.is_success:
+            cls._raise_for(response)
+        try:
+            document = response.json()
+        except ValueError:
+            raise UpstreamError("App Store Connect returned an unreadable response") from None
+        if not isinstance(document, dict):
+            raise UpstreamError("App Store Connect returned an unexpected response")
+        return document
 
+    @staticmethod
+    def _raise_for(response: httpx.Response) -> NoReturn:
         status = response.status_code
         code, title = _first_error(response)
         log.warning("asc.error", status=status, code=code)

@@ -1,5 +1,6 @@
 """Configuring the real backend: what is checked at startup, and what the app then does."""
 
+from datetime import date
 from pathlib import Path
 
 import pytest
@@ -56,6 +57,13 @@ def test_an_unsafe_key_file_stops_startup(tmp_path: Path) -> None:
 def test_a_missing_key_file_stops_startup(tmp_path: Path) -> None:
     with pytest.raises(ConfigurationError, match="not found"):
         create_appstoreconnect_gateway(settings(tmp_path / "gone.p8"))
+
+
+async def test_without_a_vendor_number_sales_say_how_to_enable_them(tmp_path: Path) -> None:
+    gateway = create_appstoreconnect_gateway(settings(write_key_file(tmp_path, generate_key_pem())))
+
+    with pytest.raises(NotSupportedError, match="VENDOR_NUMBER"):
+        await gateway.list_sales(date(2026, 11, 1), date(2026, 11, 2))
 
 
 async def test_the_real_backend_application_refuses_every_write_up_front(tmp_path: Path) -> None:
