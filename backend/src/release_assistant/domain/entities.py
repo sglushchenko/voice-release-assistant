@@ -5,7 +5,8 @@ questions or act. Wire-format details (JSON:API relationships, pagination) belon
 infrastructure adapter, not here.
 """
 
-from datetime import datetime
+from datetime import date, datetime
+from decimal import Decimal
 from enum import StrEnum
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -36,6 +37,32 @@ class AppStoreVersionState(StrEnum):
 class ReviewResponseState(StrEnum):
     PENDING_PUBLISH = "PENDING_PUBLISH"
     PUBLISHED = "PUBLISHED"
+
+
+class SalesKind(StrEnum):
+    """Transaction types the assistant distinguishes. Updates are always free and must not
+    be counted as downloads."""
+
+    DOWNLOAD = "download"
+    UPDATE = "update"
+    IN_APP_PURCHASE = "in_app_purchase"
+
+
+class SalesRow(Entity):
+    """One day of one kind of transaction in one territory.
+
+    `proceeds` is the developer's total for the row (not per unit), in `currency`, which
+    follows the territory. Amounts are estimates from Sales and Trends; never sum across
+    currencies.
+    """
+
+    app_id: str
+    day: date
+    territory: str
+    kind: SalesKind
+    units: int = Field(ge=0)
+    proceeds: Decimal = Decimal(0)
+    currency: str = "USD"
 
 
 class App(Entity):

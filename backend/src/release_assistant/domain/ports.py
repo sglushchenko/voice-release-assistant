@@ -5,7 +5,7 @@ and a test double stays tiny. Implementations: in-memory mock now, real HTTP ada
 Risk tiers and confirmation are NOT decided here; see ADR 0002.
 """
 
-from datetime import datetime
+from datetime import date, datetime
 from typing import Protocol, runtime_checkable
 
 from release_assistant.domain.entities import (
@@ -16,6 +16,7 @@ from release_assistant.domain.entities import (
     Build,
     CustomerReview,
     ReviewResponse,
+    SalesRow,
 )
 
 
@@ -90,6 +91,19 @@ class ReviewInbox(Protocol):
 
 
 @runtime_checkable
-class AppStoreGateway(AppCatalog, BuildCatalog, TesterDirectory, ReviewInbox, Protocol):
+class SalesReports(Protocol):
+    """Sales and Trends data: near-real-time but estimated. Settled payouts come from
+    Finance reports, which are a separate source."""
+
+    async def list_sales(self, start: date, end: date) -> list[SalesRow]:
+        """Rows for every app with `start <= day <= end`, oldest first. Recent days may be
+        missing: Apple publishes with a delay."""
+        ...
+
+
+@runtime_checkable
+class AppStoreGateway(
+    AppCatalog, BuildCatalog, TesterDirectory, ReviewInbox, SalesReports, Protocol
+):
     """Everything the application needs from App Store Connect in one object. Only the
     composition root asks for this; each service still depends on its single port."""

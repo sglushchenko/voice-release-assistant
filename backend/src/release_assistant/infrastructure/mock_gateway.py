@@ -6,7 +6,7 @@ adapter without touching the layers above.
 """
 
 from collections.abc import Iterable
-from datetime import datetime
+from datetime import date, datetime
 
 from release_assistant.domain.entities import (
     App,
@@ -17,12 +17,13 @@ from release_assistant.domain.entities import (
     CustomerReview,
     ReviewResponse,
     ReviewResponseState,
+    SalesRow,
 )
 from release_assistant.domain.errors import AlreadyExistsError, NotFoundError
 
 
 class MockAppStoreGateway:
-    """Implements AppCatalog, TesterDirectory and ReviewInbox over in-memory state.
+    """Implements every port (AppStoreGateway) over in-memory state.
 
     Args:
         memberships: group id -> ids of testers in that group.
@@ -38,6 +39,7 @@ class MockAppStoreGateway:
         testers: Iterable[BetaTester] = (),
         memberships: dict[str, list[str]] | None = None,
         reviews: Iterable[CustomerReview] = (),
+        sales: Iterable[SalesRow] = (),
     ) -> None:
         self._apps = {a.id: a for a in apps}
         self._builds = list(builds)
@@ -46,6 +48,7 @@ class MockAppStoreGateway:
         self._testers = {t.id: t for t in testers}
         self._memberships = {gid: list(ids) for gid, ids in (memberships or {}).items()}
         self._reviews = {r.id: r for r in reviews}
+        self._sales = list(sales)
         self._sequence = 0
 
     def _next_id(self, prefix: str) -> str:
@@ -114,6 +117,10 @@ class MockAppStoreGateway:
         if tester_id not in members:
             raise NotFoundError(f"Tester {tester_id!r} is not in group {group_id!r}")
         members.remove(tester_id)
+
+    async def list_sales(self, start: date, end: date) -> list[SalesRow]:
+        rows = [r for r in self._sales if start <= r.day <= end]
+        return sorted(rows, key=lambda r: r.day)
 
     async def get_review(self, review_id: str) -> CustomerReview:
         review = self._reviews.get(review_id)

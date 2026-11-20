@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from release_assistant.application import reviews, testers
+from release_assistant.application.analytics import AnalyticsService
 from release_assistant.application.apps import AppsService
 from release_assistant.application.builds import BuildsService
 from release_assistant.application.pending import PendingAction, PendingActionStore
@@ -52,6 +53,7 @@ class Application:
     apps: AppsService
     builds: BuildsService
     testers: BetaTesterService
+    analytics: AnalyticsService
     actions: ActionService
     _gateway: AppStoreGateway
 
@@ -91,6 +93,7 @@ def build_application(
         apps=AppsService(gateway),
         builds=BuildsService(gateway),
         testers=BetaTesterService(gateway),
+        analytics=AnalyticsService(gateway, gateway),
         actions=actions,
         _gateway=gateway,
     )

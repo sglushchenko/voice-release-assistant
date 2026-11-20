@@ -1,6 +1,7 @@
 """Shared sample data. Evals and tests reuse it so results stay comparable across runs."""
 
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
+from decimal import Decimal
 
 from release_assistant.domain.entities import (
     App,
@@ -11,10 +12,48 @@ from release_assistant.domain.entities import (
     Build,
     BuildProcessingState,
     CustomerReview,
+    SalesKind,
+    SalesRow,
 )
 from release_assistant.infrastructure.mock_gateway import MockAppStoreGateway
 
 NOW = datetime(2026, 11, 20, 12, 0, tzinfo=UTC)
+
+
+def _sample_sales() -> list[SalesRow]:
+    """October 2026 is complete; November stops at the 18th, as real data would on the 20th.
+    Proceeds are in the territory's currency, so totals must stay split by currency."""
+    d, i, u = SalesKind.DOWNLOAD, SalesKind.IN_APP_PURCHASE, SalesKind.UPDATE
+
+    def row(
+        app_id: str, day: date, territory: str, kind: SalesKind, units: int, proceeds: str, cur: str
+    ) -> SalesRow:
+        return SalesRow(
+            app_id=app_id,
+            day=day,
+            territory=territory,
+            kind=kind,
+            units=units,
+            proceeds=Decimal(proceeds),
+            currency=cur,
+        )
+
+    return [
+        row("app-1", date(2026, 10, 10), "USA", d, 120, "0", "USD"),
+        row("app-1", date(2026, 10, 10), "USA", i, 20, "55.00", "USD"),
+        row("app-1", date(2026, 10, 12), "DEU", d, 40, "0", "EUR"),
+        row("app-1", date(2026, 10, 12), "DEU", i, 5, "12.50", "EUR"),
+        row("app-1", date(2026, 10, 15), "USA", u, 300, "0", "USD"),
+        row("app-2", date(2026, 10, 20), "GBR", d, 40, "0", "GBP"),
+        row("app-2", date(2026, 10, 20), "GBR", i, 4, "9.00", "GBP"),
+        row("app-1", date(2026, 11, 5), "USA", d, 150, "0", "USD"),
+        row("app-1", date(2026, 11, 5), "USA", i, 25, "70.00", "USD"),
+        row("app-1", date(2026, 11, 9), "DEU", d, 30, "0", "EUR"),
+        row("app-1", date(2026, 11, 9), "DEU", i, 4, "10.00", "EUR"),
+        row("app-1", date(2026, 11, 14), "USA", u, 250, "0", "USD"),
+        row("app-2", date(2026, 11, 18), "GBR", d, 60, "0", "GBP"),
+        row("app-2", date(2026, 11, 18), "GBR", i, 6, "15.00", "GBP"),
+    ]
 
 
 def sample_gateway() -> MockAppStoreGateway:
@@ -79,6 +118,7 @@ def sample_gateway() -> MockAppStoreGateway:
             BetaTester(id="tester-b", email="boris@example.com", first_name="Boris"),
         ],
         memberships={"group-1": ["tester-a"], "group-2": ["tester-a", "tester-b"]},
+        sales=_sample_sales(),
         reviews=[
             CustomerReview(
                 id="review-1",
