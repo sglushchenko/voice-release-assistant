@@ -30,6 +30,9 @@ class AppsService:
     def __init__(self, catalog: AppCatalog) -> None:
         self._catalog = catalog
 
+    async def list_apps(self) -> list[App]:
+        return await self._catalog.list_apps()
+
     async def find_by_name(self, query: str) -> list[App]:
         """Resolve a spoken or typed app name.
 
