@@ -13,6 +13,7 @@ dependencies = [
     "openai>=3.57.0",
     "pydantic>=2.9",
     "pydantic-settings>=2.6",
+    "pyyaml>=6.0.3",
     "structlog>=24.4",
     "uvicorn>=0.54.0",
 ]
@@ -20,6 +21,7 @@ dependencies = [
 [project.scripts]
 release-assistant = "release_assistant.api.main:run"
 release-assistant-hash-password = "release_assistant.api.main:hash_password"
+release-assistant-evals = "release_assistant.evals.cli:main"
 
 [dependency-groups]
 dev = [
@@ -28,6 +30,7 @@ dev = [
     "pytest-asyncio>=0.24",
     "pytest-cov>=7.1.0",
     "ruff>=0.8",
+    "types-pyyaml>=6.0.12.20261113",
 ]
 
 [build-system]

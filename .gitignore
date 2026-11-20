@@ -33,3 +33,6 @@ build/
 .claude/settings.local.json
 benchmarks/results/raw/
 *.log
+
+# Evaluation runs: full results and transcripts stay local; history.csv and the baseline are committed.
+evals/runs/

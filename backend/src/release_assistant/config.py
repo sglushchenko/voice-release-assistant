@@ -85,6 +85,9 @@ class Settings(BaseSettings):
         openai_max_output_tokens: Ceiling on one model reply, thinking included.
         openai_timeout_seconds: How long to wait for the provider before giving up.
         openai_base_url: Only for an OpenAI-compatible server (a local model, a gateway).
+        openai_price_*_per_million: What the model costs per million tokens, in dollars, used
+            only to estimate the cost of evaluation runs. Left unset, no cost is shown: prices
+            change, so the repository does not hard-code them.
         backend: Which App Store Connect implementation to use. Only the mock exists so far.
         api_clients: Static API keys (for the agent), as a JSON list in the environment.
         admin_username: The human account; also the owner every credential must share.
@@ -120,6 +123,8 @@ class Settings(BaseSettings):
     openai_max_output_tokens: int = Field(default=2000, ge=64, le=32_000)
     openai_timeout_seconds: float = Field(default=30, gt=0, le=300)
     openai_base_url: str | None = None
+    openai_price_input_per_million: float | None = Field(default=None, ge=0)
+    openai_price_output_per_million: float | None = Field(default=None, ge=0)
     admin_username: str | None = Field(default=None, min_length=1, max_length=64)
     admin_password_hash: SecretStr | None = None
     access_token_ttl_minutes: int = Field(default=480, ge=1, le=1440)

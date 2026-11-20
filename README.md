@@ -16,7 +16,8 @@ The project is also a hands-on comparison of two voice-agent platforms, **Eleven
 | State (sessions, pending actions, rate-limit counters) | In memory: lost on restart, single process |
 | Agent core: provider-neutral loop, tool table, limits, scripted model, injection scenario in CI | **Done** |
 | OpenAI adapter for the agent | **Done**, tested without network; one opt-in live test (`make live`) |
-| Chat endpoint, evaluations, voice (ElevenLabs / OpenAI), iOS client | Planned |
+| Evaluations: scripted tier gates CI, LLM tier run by hand, history of results | **Done**, see [evals](evals/README.md); no real-model run recorded yet |
+| Chat endpoint, Langfuse tracing, voice (ElevenLabs / OpenAI), iOS client | Planned |
 
 Nothing here talks to Apple yet. Treat the API as a complete, tested contract over mock data.
 
@@ -70,7 +71,8 @@ How strictly an action is approved depends on its risk tier (read, reversible, p
 | `backend/src/release_assistant/observability/` | Structured logging setup |
 | `docs/adr/` | Architecture Decision Records |
 | `docs/openapi.json` | The API contract, checked by a test |
-| `ios/`, `evals/`, `benchmarks/` | Placeholders for the client, agent evaluations and provider comparison |
+| `evals/` | Evaluation cases, the scripted baseline and the history of results ([details](evals/README.md)) |
+| `ios/`, `benchmarks/` | Placeholders for the client and the provider comparison |
 
 ## Quick start
 
@@ -202,6 +204,9 @@ make check      # ruff, ruff format, mypy --strict, pytest with a 90% coverage f
 make openapi    # regenerate docs/openapi.json after changing the API
 make image      # build the container image
 make live       # opt-in: run tests that call a real model (needs your key, spends tokens)
+make eval       # scripted evaluations against the baseline (free, offline; what CI runs)
+make eval-llm   # evaluations with a real model (spends tokens, run rarely, appends to evals/history.csv)
+make eval-compare  # compare the two newest LLM runs case by case
 ```
 
 A test fails if `docs/openapi.json` is out of date, and CI runs the same checks plus a container smoke test.
@@ -212,7 +217,7 @@ Adding a capability follows the layers: define or extend a port in `domain/ports
 
 1. A real App Store Connect adapter (JWT signing with the team's private key, real reports), behind the same ports.
 2. Persistence for sessions and pending actions.
-3. Evaluations for the agent core on real and scripted models: tool-call accuracy, trajectories, and a suite of injection attacks.
+3. Tracing with Langfuse, and a chat endpoint that exposes the agent.
 4. Voice: ElevenLabs and OpenAI integrated at several levels of control, with measured latency, cost and quality.
 5. A SwiftUI client.
 
@@ -228,6 +233,7 @@ Adding a capability follows the layers: define or extend a port in `domain/ports
 | [0006](docs/adr/0006-abuse-protection.md) | Rate limits and request size cap |
 | [0007](docs/adr/0007-server-side-agent-core.md) | A provider-neutral agent core on the server |
 | [0008](docs/adr/0008-openai-adapter-over-chat-completions.md) | The OpenAI adapter uses Chat Completions over the agent's own history |
+| [0009](docs/adr/0009-evaluation-tiers-and-history.md) | Evaluations in two tiers, with a history that shows progress |
 
 ## License
 

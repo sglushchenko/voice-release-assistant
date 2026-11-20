@@ -1,4 +1,4 @@
-.PHONY: install check lint format typecheck test openapi image live run
+.PHONY: install check lint format typecheck test openapi image live eval eval-llm eval-compare eval-baseline run
 
 install:  ## Install dependencies from the lock file
 	uv sync --frozen
@@ -24,6 +24,18 @@ openapi:  ## Regenerate the committed API contract (docs/openapi.json)
 
 image:  ## Build the container image (context is the repository root)
 	docker build -f Dockerfile -t voice-release-assistant:dev ..
+
+eval:  ## Scripted evaluations: free, offline, checked against the committed baseline (this is what CI runs)
+	uv run release-assistant-evals run --tier scripted --check-baseline
+
+eval-llm:  ## Evaluations with a real model (spends tokens, run rarely); appends to evals/history.csv
+	uv run release-assistant-evals run --tier llm
+
+eval-compare:  ## Compare the two newest LLM runs case by case (BASE=<run> NEW=<run> to choose)
+	uv run release-assistant-evals compare $(BASE) $(NEW)
+
+eval-baseline:  ## Accept the newest scripted run as the baseline (review the diff first)
+	uv run release-assistant-evals baseline
 
 live:  ## Run the opt-in tests that call a real model provider (spends tokens)
 	RELEASE_ASSISTANT_RUN_LIVE=1 uv run pytest -m live -s
