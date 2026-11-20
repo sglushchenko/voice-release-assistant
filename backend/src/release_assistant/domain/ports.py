@@ -70,6 +70,10 @@ class TesterDirectory(Protocol):
 class ReviewInbox(Protocol):
     """Customer reviews and developer responses."""
 
+    async def get_review(self, review_id: str) -> CustomerReview:
+        """Raises NotFoundError for an unknown review."""
+        ...
+
     async def list_reviews(
         self,
         app_id: str,

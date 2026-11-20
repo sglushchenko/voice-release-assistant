@@ -115,6 +115,12 @@ class MockAppStoreGateway:
             raise NotFoundError(f"Tester {tester_id!r} is not in group {group_id!r}")
         members.remove(tester_id)
 
+    async def get_review(self, review_id: str) -> CustomerReview:
+        review = self._reviews.get(review_id)
+        if review is None:
+            raise NotFoundError(f"Review {review_id!r} not found")
+        return review
+
     async def list_reviews(
         self,
         app_id: str,
