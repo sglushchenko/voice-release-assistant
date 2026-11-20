@@ -1,5 +1,7 @@
 """Failures of the agent machinery, kept apart from the domain's business errors."""
 
+from release_assistant.domain.errors import DomainError
+
 
 class AgentError(Exception):
     """Base class for agent failures."""
@@ -16,3 +18,11 @@ class ToolBackendError(AgentError):
 
 class ScriptExhaustedError(AgentError):
     """A scripted test model was asked for more turns than it was given."""
+
+
+class ChatUnavailableError(DomainError):
+    """Chat cannot answer right now, for example because no model is configured."""
+
+
+class TokenBudgetExceededError(DomainError):
+    """The account has used its daily allowance of model tokens."""

@@ -88,7 +88,7 @@ def test_login_returns_a_working_bearer_token(client: TestClient) -> None:
     assert me == {
         "subject": "user:alice",
         "owner": "alice",
-        "scopes": ["confirm:button", "confirm:voice", "propose", "read"],
+        "scopes": ["chat", "confirm:button", "confirm:voice", "propose", "read"],
     }
     assert client.get("/v1/apps", headers=bearer(body["access_token"])).status_code == 200
 

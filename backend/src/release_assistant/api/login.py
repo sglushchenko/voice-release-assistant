@@ -19,7 +19,10 @@ from release_assistant.config import Settings
 
 log = structlog.get_logger(__name__)
 
-HUMAN_SCOPES = frozenset({"read", "propose", "confirm:button", "confirm:voice"})
+HUMAN_SCOPES = frozenset({"read", "propose", "chat", "confirm:button", "confirm:voice"})
+# What the chat agent holds when it calls the API on a person's behalf: never `chat` (no
+# recursion) and never a confirm scope (ADR 0004).
+_AGENT_SCOPES = frozenset({"read", "propose"})
 
 # Argon2 is deliberately memory-hungry; this bounds how many verifications run at once.
 _MAX_CONCURRENT_VERIFICATIONS = 2
@@ -218,6 +221,8 @@ class AuthService:
             clock=clock,
         )
         self._slots = asyncio.Semaphore(_MAX_CONCURRENT_VERIFICATIONS)
+        self._agent_tokens: dict[str, str] = {}  # owner -> token, in memory only
+        self._agent_principals: dict[str, Principal] = {}  # token hash -> principal
 
     @property
     def login_enabled(self) -> bool:
@@ -225,7 +230,26 @@ class AuthService:
 
     def authenticate(self, token: str) -> Principal | None:
         """A login token or a static API key, whichever the bearer token is."""
-        return self._tokens.lookup(token) or self._keys.authenticate(token)
+        return (
+            self._tokens.lookup(token)
+            or self._agent_principals.get(TokenStore._key(token))
+            or self._keys.authenticate(token)
+        )
+
+    def agent_credential(self, owner: str) -> str:
+        """A bearer token for the chat agent acting for `owner`: read and propose only.
+
+        Random, kept only in this process and never sent to a client, so it exists solely to
+        make the agent's own calls pass through the same authentication as everyone's.
+        """
+        token = self._agent_tokens.get(owner)
+        if token is None:
+            token = secrets.token_urlsafe(32)
+            self._agent_tokens[owner] = token
+            self._agent_principals[TokenStore._key(token)] = Principal(
+                subject=f"chat-agent:{owner}", owner=owner, scopes=_AGENT_SCOPES
+            )
+        return token
 
     async def login(self, username: str, password: str, client: str) -> LoginResult:
         """Exchange a username and password for a session token.

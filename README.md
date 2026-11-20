@@ -18,7 +18,8 @@ The project is also a hands-on comparison of two voice-agent platforms, **Eleven
 | OpenAI adapter for the agent | **Done**, tested without network; one opt-in live test (`make live`) |
 | Evaluations: scripted tier gates CI, LLM tier run by hand, history of results | **Done**, see [evals](evals/README.md); no real-model run recorded yet |
 | Terminal chat with the agent (`make chat`) | **Done** |
-| Chat endpoint, Langfuse tracing, voice (ElevenLabs / OpenAI), iOS client | Planned |
+| Chat endpoint `POST /v1/chat` (text, per-account token budget) | **Done** ([ADR 0012](docs/adr/0012-chat-endpoint.md)) |
+| Langfuse tracing, voice (ElevenLabs / OpenAI), iOS client | Planned |
 
 The real backend is read-only by design: nothing in this repository changes your App Store Connect account yet.
 
@@ -168,10 +169,20 @@ The contract is [`docs/openapi.json`](docs/openapi.json); generate a client from
 | TestFlight | `GET /v1/apps/{id}/beta-groups`, `/v1/beta-groups/{id}/testers` |
 | Reports | `GET /v1/reports/sales/monthly`, `/v1/reports/engagement`, `/v1/reports/engagement/recent` |
 | Sessions and reviews | `POST /v1/sessions`, `GET /v1/sessions/{id}/apps/{app}/reviews[/unanswered]` (reviews are labelled `trust: untrusted`) |
+| Chat | `POST /v1/chat` (needs the `chat` scope; a login has it) |
 | Writes | `POST /v1/sessions/{id}/actions` (propose), `GET /v1/actions[/{id}]`, `POST /v1/actions/{id}/confirm`, `POST /v1/actions/{id}/reject` |
 | Ops | `GET /healthz` |
 
 Available actions: `add_tester`, `remove_tester`, `respond_to_review`.
+
+### Chat
+
+```bash
+curl -s localhost:8000/v1/chat -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  -d '{"message": "Which apps do I have?"}'
+```
+
+The reply carries `answer`, a `conversation_id` to send back for the next message, token `usage`, and `pending_actions`: changes the agent proposed, described by the server and waiting for `POST /v1/actions/{id}/confirm`. A client should show those, not the model's words. Without `RELEASE_ASSISTANT_OPENAI_API_KEY` the route answers 503. Conversations live in memory and end with the server or after 30 idle minutes (404; start a new one). Each account may spend `CHAT_DAILY_TOKEN_BUDGET` model tokens a day (429 `budget_exceeded` after that).
 
 Sales figures are **estimates** from Sales and Trends, kept per currency and never summed across currencies; engagement figures (impressions, page views) come from a different Apple source and report how much of the requested period is actually published.
 
@@ -197,11 +208,12 @@ All settings are environment variables with the prefix `RELEASE_ASSISTANT_` (or 
 | `APPSTORE_KEY_ID`, `APPSTORE_ISSUER_ID`, `APPSTORE_PRIVATE_KEY_PATH` | unset | App Store Connect API key; the `.p8` is a **secret** kept outside the repo with owner-only permissions |
 | `APPSTORE_VENDOR_NUMBER` | unset | Digits from Payments and Financial Reports; enables real sales and downloads (the key needs a Sales-capable role) |
 | `APPSTORE_TIMEOUT_SECONDS` | `20` | Per-request timeout |
+| `CHAT_DAILY_TOKEN_BUDGET` | `500000` | Model tokens one account may spend per UTC day through `/v1/chat` |
 | `TRUSTED_PROXIES` | `127.0.0.1` | Proxies whose `X-Forwarded-For` is believed |
 | `HOST`, `PORT` | `127.0.0.1`, `8000` | Bind address |
 | `LOG_LEVEL`, `LOG_JSON` | `INFO`, `true` | Logging |
 
-Rate-limit policies and defaults: `ip` 20/second, `principal` 20/second, `login` 10/minute, `propose` 30/minute, `reports` 20/minute, `reviews` 60/minute.
+Rate-limit policies and defaults: `ip` 20/second, `principal` 20/second, `login` 10/minute, `propose` 30/minute, `reports` 20/minute, `reviews` 60/minute, `chat` 10/minute.
 
 ### Deployment notes
 
@@ -232,7 +244,7 @@ Adding a capability follows the layers: define or extend a port in `domain/ports
 
 1. Real App Store Connect: engagement analytics (impressions, page views) and, behind an explicit switch, writes. Reading, including sales and downloads, is done.
 2. Persistence for sessions and pending actions.
-3. Tracing with Langfuse, and a chat endpoint that exposes the agent.
+3. Tracing with Langfuse.
 4. Voice: ElevenLabs and OpenAI integrated at several levels of control, with measured latency, cost and quality.
 5. A SwiftUI client.
 
@@ -250,6 +262,7 @@ Adding a capability follows the layers: define or extend a port in `domain/ports
 | [0008](docs/adr/0008-openai-adapter-over-chat-completions.md) | The OpenAI adapter uses Chat Completions over the agent's own history |
 | [0009](docs/adr/0009-evaluation-tiers-and-history.md) | Evaluations in two tiers, with a history that shows progress |
 | [0010](docs/adr/0010-real-app-store-connect-backend-read-only.md) | The real App Store Connect backend starts read-only |
+| [0012](docs/adr/0012-chat-endpoint.md) | A chat endpoint whose agent is an ordinary, less-privileged API client |
 | [0011](docs/adr/0011-sales-and-trends-and-deferred-analytics.md) | Sales and downloads from Sales and Trends; engagement analytics deferred until their format is observed |
 
 ## License

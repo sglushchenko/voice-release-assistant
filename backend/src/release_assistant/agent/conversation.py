@@ -18,6 +18,8 @@ class ConversationStore(Protocol):
 
     async def append(self, conversation_id: str, messages: Sequence[Message]) -> None: ...
 
+    async def delete(self, conversation_id: str) -> None: ...
+
 
 def conversation_is_tainted(messages: Sequence[Message]) -> bool:
     """Whether any tool result in the conversation was untrusted third-party text.
@@ -49,6 +51,9 @@ class InMemoryConversationStore:
         history = self._conversations.setdefault(conversation_id, [])
         history.extend(messages)
         self._conversations[conversation_id] = self._trim(history)
+
+    async def delete(self, conversation_id: str) -> None:
+        self._conversations.pop(conversation_id, None)
 
     def _trim(self, history: list[Message]) -> list[Message]:
         if len(history) <= self._max_messages:

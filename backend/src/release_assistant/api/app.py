@@ -2,17 +2,22 @@
 
 from typing import Any
 
+import httpx
 import structlog
 from fastapi import FastAPI
 from fastapi.routing import APIRoute
 from starlette.middleware.cors import CORSMiddleware
 
+from release_assistant.agent.errors import LLMError
+from release_assistant.agent.openai_model import create_openai_model
+from release_assistant.agent.ports import LLMClient
+from release_assistant.agent.service import ChatService
 from release_assistant.api.body_limit import BodyLimitMiddleware
 from release_assistant.api.errors import Problem, install_error_handlers
 from release_assistant.api.login import AuthService
 from release_assistant.api.middleware import install_request_context
 from release_assistant.api.ratelimit import RateLimits, install_address_rate_limit
-from release_assistant.api.routes import actions, auth, catalog, reports, sessions, testers
+from release_assistant.api.routes import actions, auth, catalog, chat, reports, sessions, testers
 from release_assistant.api.security_headers import SecurityHeadersMiddleware
 from release_assistant.bootstrap import Application, build_application_from_settings
 from release_assistant.config import Settings
@@ -59,6 +64,7 @@ def create_app(
     application: Application | None = None,
     *,
     auth_service: AuthService | None = None,
+    chat_model: LLMClient | None = None,
 ) -> FastAPI:
     """Build the API.
 
@@ -67,6 +73,8 @@ def create_app(
         application: Prebuilt application, mainly for tests. Defaults to the one `settings`
             selects.
         auth_service: Prebuilt authentication, so tests can control the clock.
+        chat_model: Language model for the chat endpoint, mainly for tests. Defaults to the
+            one `settings` configures; without either, chat answers 503.
     """
     app = FastAPI(
         title="Voice Release Assistant",
@@ -118,6 +126,7 @@ def create_app(
         """Liveness probe; unauthenticated and free of side effects."""
         return {"status": "ok"}
 
+    app.state.chat = _create_chat(app, settings, application, chat_model)
     app.include_router(auth.router, responses=_AUTH_ERROR_RESPONSES)
     for router in (
         catalog.router,
@@ -125,6 +134,34 @@ def create_app(
         reports.router,
         sessions.router,
         actions.router,
+        chat.router,
     ):
         app.include_router(router, responses=_ERROR_RESPONSES)
     return app
+
+
+def _create_chat(
+    app: FastAPI, settings: Settings, application: Application, model: LLMClient | None
+) -> ChatService:
+    """The chat service, whose agent calls this same app in process with its own credential, so
+    every safeguard applies to it exactly as to an outside client (ADR 0007)."""
+    if model is None:
+        try:
+            model = create_openai_model(settings)
+        except LLMError:
+            log.warning("app.chat_disabled", note="set RELEASE_ASSISTANT_OPENAI_API_KEY")
+
+    def client_for(owner: str) -> httpx.AsyncClient:
+        return httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app),
+            base_url="http://agent.internal",
+            headers={"Authorization": f"Bearer {app.state.auth.agent_credential(owner)}"},
+            timeout=settings.openai_timeout_seconds * 2,
+        )
+
+    return ChatService(
+        model,
+        client_for,
+        application.sessions.get,
+        daily_token_budget=settings.chat_daily_token_budget,
+    )

@@ -46,6 +46,10 @@ class HttpToolBackend:
         self._tools = {tool.name: tool for tool in tools}
         self._max_result_chars = max_result_chars
 
+    @property
+    def session_id(self) -> str:
+        return self._session_id
+
     @classmethod
     async def open(cls, client: httpx.AsyncClient, tools: Sequence[Tool] = DEFAULT_TOOLS) -> Self:
         """Start an API session for a new conversation and return a backend bound to it."""

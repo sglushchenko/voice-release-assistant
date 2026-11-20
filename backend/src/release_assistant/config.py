@@ -14,7 +14,7 @@ from limits import parse_many
 from pydantic import BaseModel, Field, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-Scope = Literal["read", "propose", "confirm:button", "confirm:voice"]
+Scope = Literal["read", "propose", "chat", "confirm:button", "confirm:voice"]
 
 
 class ConfigurationError(Exception):
@@ -24,11 +24,12 @@ class ConfigurationError(Exception):
 
 _ORIGIN = re.compile(r"https?://[A-Za-z0-9.-]+(:[0-9]{1,5})?")
 
-RateLimitPolicy = Literal["ip", "principal", "login", "propose", "reports", "reviews"]
+RateLimitPolicy = Literal["ip", "principal", "login", "propose", "reports", "reviews", "chat"]
 
 # What each policy limits: `ip` every request from one address, `principal` every
 # authenticated call by one caller, `login` password attempts per address, `propose` action
-# proposals per caller, `reports` analytics reads per caller, `reviews` review reads per caller.
+# proposals per caller, `reports` analytics reads per caller, `reviews` review reads per caller,
+# `chat` messages to the agent per caller (each one can spend model tokens).
 RATE_LIMIT_DEFAULTS: dict[RateLimitPolicy, str] = {
     "ip": "20/second",
     "principal": "20/second",
@@ -36,6 +37,7 @@ RATE_LIMIT_DEFAULTS: dict[RateLimitPolicy, str] = {
     "propose": "30/minute",
     "reports": "20/minute",
     "reviews": "60/minute",
+    "chat": "10/minute",
 }
 
 
@@ -113,6 +115,9 @@ class Settings(BaseSettings):
             extends it.
         login_max_failures: Failed logins from one address before it is locked out.
         login_lockout_minutes: How long that lockout lasts.
+        chat_daily_token_budget: Model tokens (input plus output) one account may spend through
+            the chat endpoint per UTC day; the cap on what a leaked login or a runaway client
+            can cost.
     """
 
     model_config = SettingsConfigDict(
@@ -150,6 +155,7 @@ class Settings(BaseSettings):
     access_token_ttl_minutes: int = Field(default=480, ge=1, le=1440)
     login_max_failures: int = Field(default=5, ge=1, le=100)
     login_lockout_minutes: int = Field(default=15, ge=1, le=1440)
+    chat_daily_token_budget: int = Field(default=500_000, ge=1_000)
 
     @property
     def effective_rate_limits(self) -> dict[RateLimitPolicy, str]:
