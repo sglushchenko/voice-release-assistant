@@ -7,6 +7,8 @@ from release_assistant.bootstrap import build_application, build_mock_applicatio
 from release_assistant.domain import ports
 from release_assistant.infrastructure.fixtures import sample_gateway
 
+OWNER = "alice"
+
 
 def test_mock_gateway_satisfies_the_composite_port() -> None:
     assert isinstance(sample_gateway(), ports.AppStoreGateway)
@@ -14,7 +16,7 @@ def test_mock_gateway_satisfies_the_composite_port() -> None:
 
 async def test_end_to_end_read_reply_confirm() -> None:
     app = build_mock_application()
-    session = app.start_session()
+    session = app.sessions.create(OWNER)[1]
 
     [found] = await app.apps.find_by_name("pocket notes")
     complaints = await session.reviews.list_reviews(found.id, max_rating=1)
@@ -23,16 +25,16 @@ async def test_end_to_end_read_reply_confirm() -> None:
     )
     assert isinstance(pending, PendingAction)
 
-    await app.actions.confirm(pending.id, ConfirmationChannel.BUTTON)
+    await app.actions.confirm(pending.id, ConfirmationChannel.BUTTON, owner=OWNER)
 
-    after = await app.start_session().reviews.list_reviews(found.id, max_rating=1)
+    after = await app.sessions.create(OWNER)[1].reviews.list_reviews(found.id, max_rating=1)
     assert after[0].response is not None
     assert after[0].response.body == "Fixed in 1.4.1."
 
 
 async def test_session_attaches_trust_automatically() -> None:
     app = build_mock_application()
-    session = app.start_session()
+    session = app.sessions.create(OWNER)[1]
     await session.reviews.list_reviews("app-1")
 
     pending = await session.propose(
@@ -42,13 +44,13 @@ async def test_session_attaches_trust_automatically() -> None:
     assert isinstance(pending, PendingAction)
     assert pending.mode is ApprovalMode.BUTTON_ONLY
     with pytest.raises(ChannelNotAllowedError):
-        await app.actions.confirm(pending.id, ConfirmationChannel.VOICE)
+        await app.actions.confirm(pending.id, ConfirmationChannel.VOICE, owner=OWNER)
 
 
 async def test_sessions_do_not_share_trust() -> None:
     app = build_mock_application()
-    tainted = app.start_session()
-    clean = app.start_session()
+    tainted = app.sessions.create(OWNER)[1]
+    clean = app.sessions.create(OWNER)[1]
     await tainted.reviews.list_reviews("app-1")
 
     pending = await clean.propose("add_tester", {"group_id": "group-1", "email": "new@example.com"})
@@ -65,7 +67,7 @@ async def test_overrides_tighten_but_cannot_loosen_below_the_floor() -> None:
             "remove_tester": ApprovalMode.IMPLICIT_IF_CLEAR,
         },
     )
-    session = app.start_session()
+    session = app.sessions.create(OWNER)[1]
 
     add = await session.propose("add_tester", {"group_id": "group-1", "email": "x@example.com"})
     remove = await session.propose(

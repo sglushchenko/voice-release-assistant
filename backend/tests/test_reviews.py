@@ -22,6 +22,8 @@ from release_assistant.infrastructure.fixtures import sample_gateway
 from release_assistant.infrastructure.mock_gateway import MockAppStoreGateway
 from release_assistant.infrastructure.pending_store import InMemoryPendingActionStore
 
+OWNER = "alice"
+
 
 def build() -> tuple[ReviewsService, ActionService, TrustTracker, MockAppStoreGateway]:
     gateway = sample_gateway()
@@ -93,7 +95,7 @@ async def test_reply_summary_quotes_the_exact_text_to_be_published() -> None:
     _, actions, _, _ = build()
 
     pending = await actions.propose(
-        RESPOND_TO_REVIEW, {"review_id": "review-2", "body": "Fixed in 1.4.1."}
+        RESPOND_TO_REVIEW, {"review_id": "review-2", "body": "Fixed in 1.4.1."}, owner=OWNER
     )
 
     assert isinstance(pending, PendingAction)
@@ -105,11 +107,14 @@ async def test_reply_summary_quotes_the_exact_text_to_be_published() -> None:
 async def test_reply_can_be_confirmed_by_voice_when_no_untrusted_text_was_read() -> None:
     _, actions, trust, gateway = build()
     pending = await actions.propose(
-        RESPOND_TO_REVIEW, {"review_id": "review-2", "body": "Thanks!"}, trust.context()
+        RESPOND_TO_REVIEW,
+        {"review_id": "review-2", "body": "Thanks!"},
+        owner=OWNER,
+        context=trust.context(),
     )
     assert isinstance(pending, PendingAction)
 
-    await actions.confirm(pending.id, ConfirmationChannel.VOICE)
+    await actions.confirm(pending.id, ConfirmationChannel.VOICE, owner=OWNER)
 
     review = await gateway.get_review("review-2")
     assert review.response is not None
@@ -120,15 +125,18 @@ async def test_after_reading_reviews_a_reply_needs_the_button() -> None:
     reviews, actions, trust, gateway = build()
     await reviews.list_reviews("app-1")
     pending = await actions.propose(
-        RESPOND_TO_REVIEW, {"review_id": "review-2", "body": "Thanks!"}, trust.context()
+        RESPOND_TO_REVIEW,
+        {"review_id": "review-2", "body": "Thanks!"},
+        owner=OWNER,
+        context=trust.context(),
     )
     assert isinstance(pending, PendingAction)
 
     with pytest.raises(ChannelNotAllowedError):
-        await actions.confirm(pending.id, ConfirmationChannel.VOICE)
+        await actions.confirm(pending.id, ConfirmationChannel.VOICE, owner=OWNER)
     assert (await gateway.get_review("review-2")).response is None
 
-    await actions.confirm(pending.id, ConfirmationChannel.BUTTON)
+    await actions.confirm(pending.id, ConfirmationChannel.BUTTON, owner=OWNER)
 
     assert (await gateway.get_review("review-2")).response is not None
 
@@ -138,9 +146,11 @@ async def test_replying_to_an_answered_or_unknown_review_fails_at_proposal() -> 
     await gateway.respond_to_review("review-2", "Already answered")
 
     with pytest.raises(AlreadyExistsError):
-        await actions.propose(RESPOND_TO_REVIEW, {"review_id": "review-2", "body": "Again"})
+        await actions.propose(
+            RESPOND_TO_REVIEW, {"review_id": "review-2", "body": "Again"}, owner=OWNER
+        )
     with pytest.raises(NotFoundError):
-        await actions.propose(RESPOND_TO_REVIEW, {"review_id": "nope", "body": "Hi"})
+        await actions.propose(RESPOND_TO_REVIEW, {"review_id": "nope", "body": "Hi"}, owner=OWNER)
 
 
 @pytest.mark.parametrize(
@@ -155,4 +165,4 @@ async def test_invalid_reply_arguments_are_rejected(args: dict[str, object]) -> 
     _, actions, _, _ = build()
 
     with pytest.raises(ValidationError):
-        await actions.propose(RESPOND_TO_REVIEW, args)
+        await actions.propose(RESPOND_TO_REVIEW, args, owner=OWNER)

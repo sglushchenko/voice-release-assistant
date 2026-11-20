@@ -3,7 +3,7 @@
 Everything above this module depends on ports; swapping the mock gateway for the real App
 Store Connect adapter, or the in-memory store for a database, is a change here and nowhere
 else. Callers (HTTP API, voice agent, CLI) receive an `Application` and open a `Session`
-per conversation.
+per conversation through `Application.sessions`.
 """
 
 from collections.abc import Mapping
@@ -20,6 +20,7 @@ from release_assistant.application.policy import ConfirmationPolicy
 from release_assistant.application.reviews import ReviewsService
 from release_assistant.application.risk import ApprovalMode
 from release_assistant.application.service import ActionService, Executed
+from release_assistant.application.sessions import SessionRegistry
 from release_assistant.application.testers import BetaTesterService
 from release_assistant.application.trust import TrustTracker
 from release_assistant.domain.ports import AppStoreGateway
@@ -28,27 +29,32 @@ from release_assistant.infrastructure.pending_store import InMemoryPendingAction
 
 
 class Session:
-    """State of one conversation: its trust level and the services that depend on it.
+    """State of one conversation for one account: its trust level and dependent services.
 
-    Always propose writes through `propose`: it attaches the session's trust state, so a
-    caller cannot forget to apply stricter approval after untrusted content was read.
+    Always propose writes through `propose`: it attaches the session's trust state and the
+    owner, so a caller cannot forget to apply stricter approval after untrusted content was
+    read, nor file an action under someone else's account.
     """
 
-    def __init__(self, actions: ActionService, gateway: AppStoreGateway) -> None:
+    def __init__(self, owner: str, actions: ActionService, gateway: AppStoreGateway) -> None:
+        self.owner = owner
         self._actions = actions
         self.trust = TrustTracker()
         self.reviews = ReviewsService(gateway, self.trust)
 
     async def propose(self, name: str, arguments: dict[str, Any]) -> PendingAction | Executed:
-        return await self._actions.propose(name, arguments, self.trust.context())
+        return await self._actions.propose(
+            name, arguments, owner=self.owner, context=self.trust.context()
+        )
 
 
 @dataclass(frozen=True)
 class Application:
-    """Shared, stateless services plus the confirmation machinery.
+    """Shared services plus the confirmation machinery and the session registry.
 
     Confirmation (`actions.confirm` / `actions.reject`) is not tied to a session: it comes
-    from whatever channel the user acts on, such as a button in the client.
+    from whatever channel the user acts on, such as a button in the client, and is checked
+    against the action's owner.
     """
 
     apps: AppsService
@@ -57,10 +63,7 @@ class Application:
     analytics: AnalyticsService
     engagement: EngagementService
     actions: ActionService
-    _gateway: AppStoreGateway
-
-    def start_session(self) -> Session:
-        return Session(self.actions, self._gateway)
+    sessions: SessionRegistry[Session]
 
 
 def build_application(
@@ -98,7 +101,7 @@ def build_application(
         analytics=AnalyticsService(gateway, gateway),
         engagement=EngagementService(gateway, gateway),
         actions=actions,
-        _gateway=gateway,
+        sessions=SessionRegistry(lambda owner: Session(owner, actions, gateway)),
     )
 
 

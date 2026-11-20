@@ -10,11 +10,13 @@ import structlog
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from pydantic import ValidationError
 
 from release_assistant.application.errors import (
     ActionExpiredError,
     ActionNotPendingError,
     ChannelNotAllowedError,
+    TooManySessionsError,
 )
 from release_assistant.domain.errors import (
     AlreadyExistsError,
@@ -31,6 +33,7 @@ _DOMAIN_STATUS: tuple[tuple[type[DomainError], int, str], ...] = (
     (ActionNotPendingError, 409, "action_not_pending"),
     (ActionExpiredError, 410, "action_expired"),
     (ChannelNotAllowedError, 403, "channel_not_allowed"),
+    (TooManySessionsError, 429, "too_many_sessions"),
     (DataUnavailableError, 503, "data_unavailable"),
 )
 
@@ -79,6 +82,12 @@ def install_error_handlers(app: FastAPI) -> None:
         # Only location and message: the offending input is never echoed back.
         detail = "; ".join(f"{'.'.join(map(str, e['loc']))}: {e['msg']}" for e in exc.errors())
         return problem(422, "invalid_request", detail)
+
+    @app.exception_handler(ValidationError)
+    async def _invalid_arguments(_: Request, exc: ValidationError) -> JSONResponse:
+        """Action arguments are validated inside the application, not by FastAPI."""
+        detail = "; ".join(f"{'.'.join(map(str, e['loc']))}: {e['msg']}" for e in exc.errors())
+        return problem(422, "invalid_arguments", detail)
 
     @app.exception_handler(Exception)
     async def _unexpected(_: Request, exc: Exception) -> JSONResponse:

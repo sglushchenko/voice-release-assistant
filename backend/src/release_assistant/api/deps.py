@@ -43,18 +43,26 @@ async def get_principal(
     if principal is None:
         log.warning("auth.rejected", reason="invalid_credentials")
         raise ApiError(401, "unauthorized", "Invalid bearer token", _UNAUTHORIZED)
-    structlog.contextvars.bind_contextvars(subject=principal.subject)
+    structlog.contextvars.bind_contextvars(subject=principal.subject, owner=principal.owner)
     request.state.subject = principal.subject
     return principal
 
 
-def require_scope(scope: str) -> Callable[..., Awaitable[Principal]]:
-    """Dependency factory: the caller must hold `scope`."""
+PrincipalDep = Annotated[Principal, Depends(get_principal)]
 
-    async def dependency(principal: Annotated[Principal, Depends(get_principal)]) -> Principal:
-        if scope not in principal.scopes:
-            log.warning("auth.forbidden", missing_scope=scope)
-            raise ApiError(403, "forbidden", f"Missing scope: {scope}")
+
+def ensure_scope(principal: Principal, *scopes: str) -> None:
+    """Raise 403 unless the principal holds at least one of `scopes`."""
+    if not principal.scopes.intersection(scopes):
+        log.warning("auth.forbidden", needs_one_of=sorted(scopes))
+        raise ApiError(403, "forbidden", f"Missing scope: {' or '.join(sorted(scopes))}")
+
+
+def require_scope(scope: str) -> Callable[..., Awaitable[Principal]]:
+    """Dependency factory: the caller must hold `scope`. Returns the principal."""
+
+    async def dependency(principal: PrincipalDep) -> Principal:
+        ensure_scope(principal, scope)
         return principal
 
     return dependency

@@ -11,6 +11,8 @@ from release_assistant.bootstrap import build_mock_application
 from release_assistant.config import Settings
 from release_assistant.observability.logging import REDACTED, configure_logging
 
+OWNER = "alice"
+
 
 @pytest.fixture
 def stream() -> Iterator[io.StringIO]:
@@ -91,13 +93,13 @@ def test_console_format_is_not_json(stream: io.StringIO) -> None:
 async def test_action_audit_trail_has_ids_but_no_content(stream: io.StringIO) -> None:
     configure_logging(Settings(log_json=True), stream=stream)
     app = build_mock_application()
-    session = app.start_session()
+    session = app.sessions.create(OWNER)[1]
 
     pending = await session.propose(
         "add_tester", {"group_id": "group-1", "email": "private.person@example.com"}
     )
-    await app.actions.confirm(pending.id, ConfirmationChannel.BUTTON)  # type: ignore[union-attr]
+    await app.actions.confirm(pending.id, ConfirmationChannel.BUTTON, owner=OWNER)  # type: ignore[union-attr]
 
-    events = [e["event"] for e in lines(stream)]
+    events = [e["event"] for e in lines(stream) if str(e["event"]).startswith("action.")]
     assert events == ["action.proposed", "action.executed"]
     assert "private.person@example.com" not in stream.getvalue()

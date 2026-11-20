@@ -14,6 +14,16 @@ class InMemoryPendingActionStore:
     async def get(self, action_id: str) -> PendingAction | None:
         return self._actions.get(action_id)
 
+    async def list_for_owner(
+        self, owner: str, *, status: PendingStatus | None = None
+    ) -> list[PendingAction]:
+        mine = [
+            a
+            for a in self._actions.values()
+            if a.owner == owner and (status is None or a.status is status)
+        ]
+        return sorted(mine, key=lambda a: a.created_at, reverse=True)
+
     async def transition(
         self,
         action_id: str,

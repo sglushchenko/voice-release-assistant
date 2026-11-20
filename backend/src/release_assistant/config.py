@@ -16,7 +16,10 @@ class ApiClient(BaseModel):
     """One credential allowed to call the HTTP API (ADR 0004).
 
     Args:
-        subject: Stable name of the client, used for ownership and in logs.
+        subject: Stable name of the client (which app or agent is calling), used in logs.
+        owner: The account the client acts for. Sessions and pending actions belong to the
+            owner, so an agent client and the user's own app share them when they share an
+            owner, and nobody else can touch them.
         key_sha256: Hex SHA-256 of the API key. Only the hash is stored; generate it with
             `printf '%s' "$KEY" | shasum -a 256`.
         scopes: What the client may do. Confirmation scopes are what let a client approve
@@ -24,6 +27,7 @@ class ApiClient(BaseModel):
     """
 
     subject: str = Field(min_length=1, max_length=64)
+    owner: str = Field(min_length=1, max_length=64)
     key_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     scopes: frozenset[Scope]
 

@@ -72,9 +72,14 @@ class ActionService:
         self,
         name: str,
         arguments: dict[str, Any],
+        *,
+        owner: str,
         context: ConfirmationContext | None = None,
     ) -> PendingAction | Executed:
-        """Validate and register an action.
+        """Validate and register an action on behalf of `owner`.
+
+        `owner` is the account the action belongs to (not a credential): only that account
+        can later confirm or reject it, whichever client it uses.
 
         Returns a PendingAction to show the user, or Executed when the resolved mode is
         IMPLICIT_IF_CLEAR. Raises pydantic.ValidationError for bad arguments; nothing is
@@ -86,6 +91,7 @@ class ActionService:
         now = self._clock()
         pending = PendingAction(
             id=uuid4().hex,
+            owner=owner,
             action=name,
             tier=definition.spec.tier,
             summary=await definition.describe(args),
@@ -100,12 +106,26 @@ class ActionService:
             return await self._execute(definition, pending, channel=None)
         return pending
 
-    async def confirm(self, action_id: str, channel: ConfirmationChannel) -> Executed:
+    async def get(self, action_id: str, *, owner: str) -> PendingAction:
+        """One of `owner`'s actions. Someone else's action is reported as not found, so ids
+        cannot be probed."""
+        pending = await self._store.get(action_id)
+        if pending is None or pending.owner != owner:
+            raise NotFoundError(f"Action {action_id!r} not found")
+        return pending
+
+    async def list_actions(
+        self, *, owner: str, status: PendingStatus | None = None
+    ) -> list[PendingAction]:
+        """`owner`'s actions, newest first, optionally limited to one status."""
+        return await self._store.list_for_owner(owner, status=status)
+
+    async def confirm(
+        self, action_id: str, channel: ConfirmationChannel, *, owner: str
+    ) -> Executed:
         """Approve and run a pending action. `channel` must be set by the client or transport,
         never taken from model output."""
-        pending = await self._store.get(action_id)
-        if pending is None:
-            raise NotFoundError(f"Action {action_id!r} not found")
+        pending = await self.get(action_id, owner=owner)
         if pending.status is not PendingStatus.PENDING:
             raise ActionNotPendingError(f"Action {action_id!r} is {pending.status.value}")
         if self._clock() >= pending.expires_at:
@@ -126,8 +146,9 @@ class ActionService:
             )
         return await self._execute(self._definition(pending.action), pending, channel)
 
-    async def reject(self, action_id: str) -> PendingAction:
+    async def reject(self, action_id: str, *, owner: str) -> PendingAction:
         """Cancel a pending action without running it."""
+        await self.get(action_id, owner=owner)
         rejected = await self._store.transition(
             action_id, expected=PendingStatus.PENDING, new=PendingStatus.REJECTED
         )

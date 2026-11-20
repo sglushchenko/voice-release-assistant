@@ -13,6 +13,7 @@ class Principal:
     """The authenticated caller and what it may do."""
 
     subject: str
+    owner: str
     scopes: frozenset[str]
 
 
@@ -29,5 +30,5 @@ class Authenticator:
         digest = hashlib.sha256(token.encode()).hexdigest()
         for client in self._clients:
             if hmac.compare_digest(digest, client.key_sha256):
-                return Principal(client.subject, frozenset(client.scopes))
+                return Principal(client.subject, client.owner, frozenset(client.scopes))
         return None

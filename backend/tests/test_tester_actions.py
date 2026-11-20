@@ -17,6 +17,8 @@ from release_assistant.infrastructure.fixtures import sample_gateway
 from release_assistant.infrastructure.mock_gateway import MockAppStoreGateway
 from release_assistant.infrastructure.pending_store import InMemoryPendingActionStore
 
+OWNER = "alice"
+
 
 def build() -> tuple[ActionService, MockAppStoreGateway]:
     gateway = sample_gateway()
@@ -29,7 +31,7 @@ def build() -> tuple[ActionService, MockAppStoreGateway]:
 
 
 async def propose(service: ActionService, name: str, args: dict[str, str]) -> PendingAction:
-    outcome = await service.propose(name, args)
+    outcome = await service.propose(name, args, owner=OWNER)
     assert isinstance(outcome, PendingAction)
     return outcome
 
@@ -50,7 +52,7 @@ async def test_add_tester_by_voice_changes_nothing_until_confirmed() -> None:
 
     assert len(await gateway.list_testers("group-1")) == 1
 
-    await service.confirm(pending.id, ConfirmationChannel.VOICE)
+    await service.confirm(pending.id, ConfirmationChannel.VOICE, owner=OWNER)
 
     emails = [t.email for t in await gateway.list_testers("group-1")]
     assert emails == ["anna@example.com", "c@example.com"]
@@ -73,10 +75,10 @@ async def test_remove_tester_requires_button() -> None:
     )
 
     with pytest.raises(ChannelNotAllowedError):
-        await service.confirm(pending.id, ConfirmationChannel.VOICE)
+        await service.confirm(pending.id, ConfirmationChannel.VOICE, owner=OWNER)
     assert len(await gateway.list_testers("group-2")) == 2
 
-    await service.confirm(pending.id, ConfirmationChannel.BUTTON)
+    await service.confirm(pending.id, ConfirmationChannel.BUTTON, owner=OWNER)
 
     assert [t.id for t in await gateway.list_testers("group-2")] == ["tester-a"]
 
@@ -87,12 +89,13 @@ async def test_untrusted_content_makes_add_tester_button_only() -> None:
     outcome = await service.propose(
         ADD_TESTER,
         {"group_id": "group-1", "email": "attacker@example.com"},
-        ConfirmationContext(untrusted_content_seen=True),
+        owner=OWNER,
+        context=ConfirmationContext(untrusted_content_seen=True),
     )
     assert isinstance(outcome, PendingAction)
 
     with pytest.raises(ChannelNotAllowedError):
-        await service.confirm(outcome.id, ConfirmationChannel.VOICE)
+        await service.confirm(outcome.id, ConfirmationChannel.VOICE, owner=OWNER)
 
 
 @pytest.mark.parametrize(
@@ -109,13 +112,17 @@ async def test_invalid_arguments_are_rejected_before_anything_is_stored(
     service, _ = build()
 
     with pytest.raises(ValidationError):
-        await service.propose(ADD_TESTER, args)
+        await service.propose(ADD_TESTER, args, owner=OWNER)
 
 
 async def test_unknown_group_or_tester_fails_at_proposal_time() -> None:
     service, _ = build()
 
     with pytest.raises(NotFoundError):
-        await service.propose(ADD_TESTER, {"group_id": "nope", "email": "a@example.com"})
+        await service.propose(
+            ADD_TESTER, {"group_id": "nope", "email": "a@example.com"}, owner=OWNER
+        )
     with pytest.raises(NotFoundError):
-        await service.propose(REMOVE_TESTER, {"group_id": "group-1", "tester_id": "tester-b"})
+        await service.propose(
+            REMOVE_TESTER, {"group_id": "group-1", "tester_id": "tester-b"}, owner=OWNER
+        )

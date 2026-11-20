@@ -25,8 +25,15 @@ NO_SCOPES = {"Authorization": "Bearer powerless-key"}
 def client() -> TestClient:
     settings = Settings(
         api_clients=[
-            ApiClient(subject="dashboard", key_sha256=sha256("reader-key"), scopes={"read"}),
-            ApiClient(subject="agent", key_sha256=sha256("powerless-key"), scopes={"propose"}),
+            ApiClient(
+                subject="dashboard", owner="alice", key_sha256=sha256("reader-key"), scopes={"read"}
+            ),
+            ApiClient(
+                subject="agent",
+                owner="alice",
+                key_sha256=sha256("powerless-key"),
+                scopes={"propose"},
+            ),
         ]
     )
     return TestClient(create_app(settings, build_mock_application()))
@@ -212,7 +219,9 @@ def test_unexpected_errors_return_a_generic_500() -> None:
 
     application.apps.list_apps = boom  # type: ignore[method-assign]
     settings = Settings(
-        api_clients=[ApiClient(subject="d", key_sha256=sha256("reader-key"), scopes={"read"})]
+        api_clients=[
+            ApiClient(subject="d", owner="alice", key_sha256=sha256("reader-key"), scopes={"read"})
+        ]
     )
     tolerant = TestClient(create_app(settings, application), raise_server_exceptions=False)
 

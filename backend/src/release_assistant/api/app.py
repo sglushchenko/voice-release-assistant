@@ -6,7 +6,7 @@ from fastapi import FastAPI
 from release_assistant.api.auth import Authenticator
 from release_assistant.api.errors import install_error_handlers
 from release_assistant.api.middleware import install_request_context
-from release_assistant.api.routes import catalog, reports, testers
+from release_assistant.api.routes import actions, catalog, reports, sessions, testers
 from release_assistant.bootstrap import Application, build_mock_application
 from release_assistant.config import Settings
 
@@ -36,6 +36,12 @@ def create_app(settings: Settings, application: Application | None = None) -> Fa
         """Liveness probe; unauthenticated and free of side effects."""
         return {"status": "ok"}
 
-    for router in (catalog.router, testers.router, reports.router):
+    for router in (
+        catalog.router,
+        testers.router,
+        reports.router,
+        sessions.router,
+        actions.router,
+    ):
         app.include_router(router)
     return app

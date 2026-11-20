@@ -11,5 +11,9 @@ class ActionExpiredError(DomainError):
     """The confirmation window closed before the action was approved."""
 
 
+class TooManySessionsError(DomainError):
+    """The account already holds the maximum number of live sessions."""
+
+
 class ChannelNotAllowedError(DomainError):
     """The action's approval mode does not accept confirmation from this channel."""
