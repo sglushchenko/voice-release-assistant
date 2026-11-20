@@ -88,7 +88,7 @@ class ActionService:
             id=uuid4().hex,
             action=name,
             tier=definition.spec.tier,
-            summary=definition.describe(args),
+            summary=await definition.describe(args),
             arguments=args.model_dump(mode="json"),
             mode=mode,
             created_at=now,

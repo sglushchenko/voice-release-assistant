@@ -40,6 +40,10 @@ class TesterDirectory(Protocol):
 
     async def list_groups(self, app_id: str) -> list[BetaGroup]: ...
 
+    async def get_group(self, group_id: str) -> BetaGroup:
+        """Raises NotFoundError for an unknown group."""
+        ...
+
     async def list_testers(self, group_id: str) -> list[BetaTester]: ...
 
     async def add_tester(

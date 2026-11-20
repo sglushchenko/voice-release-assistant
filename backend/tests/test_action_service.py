@@ -49,10 +49,13 @@ class Harness:
             self.calls.append(args.target)
             return "ok"
 
+        async def describe(args: Args) -> str:
+            return f"Touch {args.target}"
+
         definition = ActionDefinition(
             spec=ActionSpec("touch", tier),
             arguments_model=Args,
-            describe=lambda args: f"Touch {args.target}",
+            describe=describe,
             handler=handler,
         )
         self.service = ActionService(
@@ -194,10 +197,13 @@ async def test_unknown_action_and_unknown_id_raise_not_found() -> None:
 def test_read_actions_cannot_be_registered_for_confirmation() -> None:
     async def handler(_: Args) -> None: ...
 
+    async def describe(args: Args) -> str:
+        return args.target
+
     with pytest.raises(ValueError, match="read actions"):
         ActionDefinition(
             spec=ActionSpec("list", RiskTier.READ),
             arguments_model=Args,
-            describe=lambda a: a.target,
+            describe=describe,
             handler=handler,
         )

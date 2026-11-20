@@ -76,6 +76,10 @@ class MockAppStoreGateway:
         self._require_app(app_id)
         return [g for g in self._groups.values() if g.app_id == app_id]
 
+    async def get_group(self, group_id: str) -> BetaGroup:
+        self._require_group(group_id)
+        return self._groups[group_id]
+
     async def list_testers(self, group_id: str) -> list[BetaTester]:
         self._require_group(group_id)
         return [self._testers[tid] for tid in self._memberships.get(group_id, [])]
