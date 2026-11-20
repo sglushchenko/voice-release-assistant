@@ -17,6 +17,7 @@ The project is also a hands-on comparison of two voice-agent platforms, **Eleven
 | Agent core: provider-neutral loop, tool table, limits, scripted model, injection scenario in CI | **Done** |
 | OpenAI adapter for the agent | **Done**, tested without network; one opt-in live test (`make live`) |
 | Evaluations: scripted tier gates CI, LLM tier run by hand, history of results | **Done**, see [evals](evals/README.md); no real-model run recorded yet |
+| Terminal chat with the agent (`make chat`) | **Done** |
 | Chat endpoint, Langfuse tracing, voice (ElevenLabs / OpenAI), iOS client | Planned |
 
 The real backend is read-only by design: nothing in this repository changes your App Store Connect account yet.
@@ -115,6 +116,16 @@ or in a hardened container, from the repository root:
 ```bash
 docker compose up --build                 # published on 127.0.0.1:8000 only
 ```
+
+### Chat with the agent in a terminal
+
+With `RELEASE_ASSISTANT_OPENAI_API_KEY` in your `.env` (it spends a few cents of tokens):
+
+```bash
+cd backend && make chat
+```
+
+It runs the real API in process; the agent can read and propose, and only you can approve with `/confirm <id>`. `/trace` shows which tools ran, `/pending` lists waiting changes, `/help` the rest. Select the real account with `RELEASE_ASSISTANT_BACKEND=appstoreconnect` (read-only) and check it first with `make live-asc`.
 
 ### 3. Try it
 

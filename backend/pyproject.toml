@@ -23,6 +23,7 @@ dependencies = [
 release-assistant = "release_assistant.api.main:run"
 release-assistant-hash-password = "release_assistant.api.main:hash_password"
 release-assistant-evals = "release_assistant.evals.cli:main"
+release-assistant-chat = "release_assistant.agent.console:main"
 
 [dependency-groups]
 dev = [
