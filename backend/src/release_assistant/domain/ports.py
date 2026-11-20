@@ -87,3 +87,9 @@ class ReviewInbox(Protocol):
     async def respond_to_review(self, review_id: str, body: str) -> ReviewResponse:
         """Publicly visible. Raises NotFoundError, or AlreadyExistsError if already answered."""
         ...
+
+
+@runtime_checkable
+class AppStoreGateway(AppCatalog, BuildCatalog, TesterDirectory, ReviewInbox, Protocol):
+    """Everything the application needs from App Store Connect in one object. Only the
+    composition root asks for this; each service still depends on its single port."""
