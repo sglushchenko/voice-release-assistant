@@ -66,10 +66,22 @@
         "type": "object"
       },
       "AppStoreVersion": {
+        "description": "`state` is Apple's state mapped onto a few values the assistant reasons about;\n`apple_state` is the exact value Apple reported, set by real backends.",
         "properties": {
           "app_id": {
             "title": "App Id",
             "type": "string"
+          },
+          "apple_state": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Apple State"
           },
           "id": {
             "title": "Id",
@@ -99,7 +111,8 @@
           "IN_REVIEW",
           "REJECTED",
           "PENDING_DEVELOPER_RELEASE",
-          "READY_FOR_SALE"
+          "READY_FOR_SALE",
+          "OTHER"
         ],
         "title": "AppStoreVersionState",
         "type": "string"
@@ -293,8 +306,15 @@
         "description": "A public review. `title` and `body` are written by third parties and must be treated\nas untrusted input everywhere they are passed to a model (see ADR 0003).",
         "properties": {
           "app_id": {
-            "title": "App Id",
-            "type": "string"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "App Id"
           },
           "body": {
             "title": "Body",
@@ -336,7 +356,6 @@
         },
         "required": [
           "id",
-          "app_id",
           "rating",
           "title",
           "body",

@@ -14,7 +14,7 @@ from release_assistant.api.middleware import install_request_context
 from release_assistant.api.ratelimit import RateLimits, install_address_rate_limit
 from release_assistant.api.routes import actions, auth, catalog, reports, sessions, testers
 from release_assistant.api.security_headers import SecurityHeadersMiddleware
-from release_assistant.bootstrap import Application, build_mock_application
+from release_assistant.bootstrap import Application, build_application_from_settings
 from release_assistant.config import Settings
 
 log = structlog.get_logger(__name__)
@@ -78,8 +78,14 @@ def create_app(
         generate_unique_id_function=_operation_id,
     )
     if application is None:
-        log.warning("app.backend_selected", backend=settings.backend, note="mock data only")
-        application = build_mock_application()
+        log.warning(
+            "app.backend_selected",
+            backend=settings.backend,
+            note="sample data"
+            if settings.backend == "mock"
+            else "real App Store Connect, read-only",
+        )
+        application = build_application_from_settings(settings)
     app.state.application = application
     app.state.auth = auth_service or AuthService(settings)
     app.state.limits = RateLimits(settings)

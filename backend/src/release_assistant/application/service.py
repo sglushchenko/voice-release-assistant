@@ -5,7 +5,7 @@ endpoint, a test) can only propose; approval has to arrive through `confirm` on 
 allowed channel.
 """
 
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Collection, Iterable
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -26,7 +26,7 @@ from release_assistant.application.pending import (
 )
 from release_assistant.application.policy import ConfirmationContext, ConfirmationPolicy
 from release_assistant.application.risk import ApprovalMode, ConfirmationChannel
-from release_assistant.domain.errors import NotFoundError
+from release_assistant.domain.errors import NotFoundError, NotSupportedError
 
 log = structlog.get_logger(__name__)
 
@@ -49,6 +49,8 @@ class ActionService:
         definitions: Every action this service may run.
         policy: Resolves the approval mode per action.
         store: Holds pending actions between propose and confirm.
+        disabled_actions: Actions this backend cannot perform yet; proposing one is refused
+            with NotSupportedError.
         ttl: How long a proposal stays confirmable.
         clock: Injected so tests control expiry.
     """
@@ -59,10 +61,12 @@ class ActionService:
         definitions: Iterable[ActionDefinition],
         policy: ConfirmationPolicy,
         store: PendingActionStore,
+        disabled_actions: Collection[str] = (),
         ttl: timedelta = timedelta(minutes=5),
         clock: Callable[[], datetime] = _utcnow,
     ) -> None:
         self._definitions = {d.spec.name: d for d in definitions}
+        self._disabled = frozenset(disabled_actions)
         self._policy = policy
         self._store = store
         self._ttl = ttl
@@ -85,6 +89,9 @@ class ActionService:
         IMPLICIT_IF_CLEAR. Raises pydantic.ValidationError for bad arguments; nothing is
         stored in that case.
         """
+        if name in self._disabled:
+            # Refused up front, so nobody is shown a confirmation that could only fail.
+            raise NotSupportedError(f"'{name}' is not supported by this backend yet")
         definition = self._definition(name)
         args = definition.arguments_model.model_validate(arguments)
         mode = self._policy.effective_mode(definition.spec, context)

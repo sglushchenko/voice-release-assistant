@@ -5,6 +5,7 @@ which is git-ignored. See `.env.example` for the full list.
 """
 
 import re
+from pathlib import Path
 from typing import Literal
 
 from argon2 import extract_parameters
@@ -14,6 +15,12 @@ from pydantic import BaseModel, Field, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 Scope = Literal["read", "propose", "confirm:button", "confirm:voice"]
+
+
+class ConfigurationError(Exception):
+    """The configuration cannot be used (a missing or unsafe key file, a missing setting). The
+    message names what to fix and never contains a secret."""
+
 
 _ORIGIN = re.compile(r"https?://[A-Za-z0-9.-]+(:[0-9]{1,5})?")
 
@@ -88,7 +95,13 @@ class Settings(BaseSettings):
         openai_price_*_per_million: What the model costs per million tokens, in dollars, used
             only to estimate the cost of evaluation runs. Left unset, no cost is shown: prices
             change, so the repository does not hard-code them.
-        backend: Which App Store Connect implementation to use. Only the mock exists so far.
+        backend: Which App Store Connect implementation to use: `mock` (sample data) or
+            `appstoreconnect` (the real service, read-only for now).
+        appstore_key_id: The API key's Key ID (App Store Connect > Users and Access > Keys).
+        appstore_issuer_id: The team's Issuer ID, shown on the same page.
+        appstore_private_key_path: Path to the downloaded `AuthKey_<KeyID>.p8`. Keep it outside
+            the repository with owner-only permissions; only the path is configuration.
+        appstore_timeout_seconds: How long to wait for one App Store Connect request.
         api_clients: Static API keys (for the agent), as a JSON list in the environment.
         admin_username: The human account; also the owner every credential must share.
         admin_password_hash: argon2id hash of the admin password, never the password itself.
@@ -108,7 +121,11 @@ class Settings(BaseSettings):
     log_json: bool = True
     host: str = "127.0.0.1"
     port: int = Field(default=8000, ge=1, le=65535)
-    backend: Literal["mock"] = "mock"
+    backend: Literal["mock", "appstoreconnect"] = "mock"
+    appstore_key_id: str | None = None
+    appstore_issuer_id: str | None = None
+    appstore_private_key_path: Path | None = None
+    appstore_timeout_seconds: float = Field(default=20, gt=0, le=120)
     api_clients: list[ApiClient] = []
     trusted_proxies: str = "127.0.0.1"
     max_request_bytes: int = Field(default=65_536, ge=1024)
@@ -135,6 +152,20 @@ class Settings(BaseSettings):
     def effective_rate_limits(self) -> dict[RateLimitPolicy, str]:
         """Defaults with the configured overrides applied."""
         return {**RATE_LIMIT_DEFAULTS, **self.rate_limits}
+
+    @model_validator(mode="after")
+    def _validate_appstoreconnect(self) -> "Settings":
+        """Name every missing setting at startup rather than failing at the first request."""
+        if self.backend != "appstoreconnect":
+            return self
+        missing = [
+            f"RELEASE_ASSISTANT_{name.upper()}"
+            for name in ("appstore_key_id", "appstore_issuer_id", "appstore_private_key_path")
+            if getattr(self, name) is None
+        ]
+        if missing:
+            raise ValueError(f"backend=appstoreconnect also needs: {', '.join(missing)}")
+        return self
 
     @model_validator(mode="after")
     def _validate_cors_origins(self) -> "Settings":

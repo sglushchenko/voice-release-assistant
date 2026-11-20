@@ -1,4 +1,4 @@
-.PHONY: install check lint format typecheck test openapi image live eval eval-llm eval-compare eval-baseline run
+.PHONY: install check lint format typecheck test openapi image live eval eval-llm eval-compare eval-baseline run live-asc
 
 install:  ## Install dependencies from the lock file
 	uv sync --frozen
@@ -39,6 +39,9 @@ eval-baseline:  ## Accept the newest scripted run as the baseline (review the di
 
 live:  ## Run the opt-in tests that call a real model provider (spends tokens)
 	RELEASE_ASSISTANT_RUN_LIVE=1 uv run pytest -m live -s
+
+live-asc:  ## Read-only calls to your real App Store Connect account (needs the key settings)
+	RELEASE_ASSISTANT_RUN_LIVE_ASC=1 uv run pytest -m live -s tests/live/test_appstoreconnect_live.py
 
 run:  ## Start the API server (reads .env)
 	uv run release-assistant

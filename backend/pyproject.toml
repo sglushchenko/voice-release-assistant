@@ -13,6 +13,7 @@ dependencies = [
     "openai>=3.57.0",
     "pydantic>=2.9",
     "pydantic-settings>=2.6",
+    "pyjwt[crypto]>=2.15.1",
     "pyyaml>=6.0.3",
     "structlog>=24.4",
     "uvicorn>=0.54.0",

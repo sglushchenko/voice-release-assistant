@@ -12,14 +12,14 @@ The project is also a hands-on comparison of two voice-agent platforms, **Eleven
 | | |
 |---|---|
 | Backend API (auth, reads, confirmed writes, analytics) | **Done**, 230+ tests, coverage floor of 90% enforced in CI |
-| App Store Connect data | **Mock only.** A real adapter is not written yet; the code runs against in-memory sample data |
+| App Store Connect data | Mock by default. A **real read-only adapter** (apps, versions, builds, TestFlight, reviews) is selectable; writes and sales/engagement reports answer "not supported yet" ([ADR 0010](docs/adr/0010-real-app-store-connect-backend-read-only.md)) |
 | State (sessions, pending actions, rate-limit counters) | In memory: lost on restart, single process |
 | Agent core: provider-neutral loop, tool table, limits, scripted model, injection scenario in CI | **Done** |
 | OpenAI adapter for the agent | **Done**, tested without network; one opt-in live test (`make live`) |
 | Evaluations: scripted tier gates CI, LLM tier run by hand, history of results | **Done**, see [evals](evals/README.md); no real-model run recorded yet |
 | Chat endpoint, Langfuse tracing, voice (ElevenLabs / OpenAI), iOS client | Planned |
 
-Nothing here talks to Apple yet. Treat the API as a complete, tested contract over mock data.
+The real backend is read-only by design: nothing in this repository changes your App Store Connect account yet.
 
 ## Highlights
 
@@ -65,7 +65,7 @@ How strictly an action is approved depends on its risk tier (read, reversible, p
 |---|---|
 | `backend/src/release_assistant/domain/` | Entities, ports (protocols), domain errors |
 | `backend/src/release_assistant/application/` | Services per area (apps, builds, testers, reviews, sales, engagement), risk and confirmation policy, sessions, trust tracking |
-| `backend/src/release_assistant/infrastructure/` | In-memory App Store Connect gateway and fixtures, pending-action store |
+| `backend/src/release_assistant/infrastructure/` | In-memory gateway and fixtures, the read-only App Store Connect adapter (`appstoreconnect/`), composite gateway, pending-action store |
 | `backend/src/release_assistant/api/` | FastAPI app: routes, authentication, rate limiting, middleware |
 | `backend/src/release_assistant/agent/` | Agent core: loop, tool table, HTTP tool backend, conversation store, scripted model |
 | `backend/src/release_assistant/observability/` | Structured logging setup |
@@ -182,6 +182,9 @@ All settings are environment variables with the prefix `RELEASE_ASSISTANT_` (or 
 | `OPENAI_API_KEY` | unset | **Secret.** The agent's language model key; only in your own git-ignored `.env` |
 | `OPENAI_MODEL`, `OPENAI_REASONING_EFFORT` | `gpt-5-mini`, unset | Model name as your account lists it; reasoning effort (`minimal` to `high`) if the model supports it |
 | `OPENAI_MAX_OUTPUT_TOKENS`, `OPENAI_TIMEOUT_SECONDS`, `OPENAI_BASE_URL` | `2000`, `30`, unset | Reply ceiling, provider timeout, and an optional OpenAI-compatible server |
+| `BACKEND` | `mock` | `mock` or `appstoreconnect` (read-only); the latter also needs the three below |
+| `APPSTORE_KEY_ID`, `APPSTORE_ISSUER_ID`, `APPSTORE_PRIVATE_KEY_PATH` | unset | App Store Connect API key; the `.p8` is a **secret** kept outside the repo with owner-only permissions |
+| `APPSTORE_TIMEOUT_SECONDS` | `20` | Per-request timeout |
 | `TRUSTED_PROXIES` | `127.0.0.1` | Proxies whose `X-Forwarded-For` is believed |
 | `HOST`, `PORT` | `127.0.0.1`, `8000` | Bind address |
 | `LOG_LEVEL`, `LOG_JSON` | `INFO`, `true` | Logging |
@@ -215,7 +218,7 @@ Adding a capability follows the layers: define or extend a port in `domain/ports
 
 ## Roadmap
 
-1. A real App Store Connect adapter (JWT signing with the team's private key, real reports), behind the same ports.
+1. Real App Store Connect: reports (sales, engagement) and, behind an explicit switch, writes. Reading is done.
 2. Persistence for sessions and pending actions.
 3. Tracing with Langfuse, and a chat endpoint that exposes the agent.
 4. Voice: ElevenLabs and OpenAI integrated at several levels of control, with measured latency, cost and quality.
@@ -234,6 +237,7 @@ Adding a capability follows the layers: define or extend a port in `domain/ports
 | [0007](docs/adr/0007-server-side-agent-core.md) | A provider-neutral agent core on the server |
 | [0008](docs/adr/0008-openai-adapter-over-chat-completions.md) | The OpenAI adapter uses Chat Completions over the agent's own history |
 | [0009](docs/adr/0009-evaluation-tiers-and-history.md) | Evaluations in two tiers, with a history that shows progress |
+| [0010](docs/adr/0010-real-app-store-connect-backend-read-only.md) | The real App Store Connect backend starts read-only |
 
 ## License
 
