@@ -1,7 +1,5 @@
-"""TestFlight tester management: the two write actions and their default approval modes.
-
-Reading groups and testers needs no confirmation, so callers use the `TesterDirectory`
-port directly.
+"""TestFlight tester management: read queries, the two write actions and their default
+approval modes. Reads need no confirmation; writes go through ActionService.
 """
 
 from typing import Annotated
@@ -10,7 +8,7 @@ from pydantic import BaseModel, ConfigDict, StringConstraints
 
 from release_assistant.application.actions import ActionDefinition
 from release_assistant.application.risk import ActionSpec, ApprovalMode, RiskTier
-from release_assistant.domain.entities import BetaTester
+from release_assistant.domain.entities import BetaGroup, BetaTester
 from release_assistant.domain.errors import NotFoundError
 from release_assistant.domain.ports import TesterDirectory
 
@@ -49,6 +47,35 @@ class RemoveTesterArgs(BaseModel):
 
     group_id: _Id
     tester_id: _Id
+
+
+class BetaTesterService:
+    """Read-only tester questions.
+
+    Args:
+        directory: Source of groups and testers; mock or real.
+    """
+
+    def __init__(self, directory: TesterDirectory) -> None:
+        self._directory = directory
+
+    async def list_groups(self, app_id: str) -> list[BetaGroup]:
+        return await self._directory.list_groups(app_id)
+
+    async def list_testers(self, group_id: str) -> list[BetaTester]:
+        return await self._directory.list_testers(group_id)
+
+    async def find_in_group(self, group_id: str, email: str) -> BetaTester | None:
+        """The tester with this email in the group, or None. Email match ignores case and
+        surrounding spaces."""
+        needle = email.strip().lower()
+        testers = await self._directory.list_testers(group_id)
+        return next((t for t in testers if t.email == needle), None)
+
+    async def groups_of(self, app_id: str, email: str) -> list[BetaGroup]:
+        """Groups of `app_id` that include this email; answers "where is Anna testing?"."""
+        groups = await self._directory.list_groups(app_id)
+        return [g for g in groups if await self.find_in_group(g.id, email) is not None]
 
 
 def build_tester_actions(directory: TesterDirectory) -> list[ActionDefinition]:
