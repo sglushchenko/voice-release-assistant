@@ -10,6 +10,7 @@ dependencies = [
     "fastapi>=0.165.0",
     "httpx>=0.28.1",
     "limits>=5.8.0",
+    "openai>=3.57.0",
     "pydantic>=2.9",
     "pydantic-settings>=2.6",
     "structlog>=24.4",
@@ -60,6 +61,8 @@ show_missing = true
 skip_covered = true
 
 [tool.pytest.ini_options]
+addopts = "-m 'not live'"
+markers = ["live: calls a real model provider; needs a key and spends money, run with `make live`"]
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
 testpaths = ["tests"]

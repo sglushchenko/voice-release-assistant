@@ -77,6 +77,14 @@ class Settings(BaseSettings):
         rate_limits: Overrides for the default limits, by policy name, written as
             "10/minute" or several joined by ";" ("20/second;600/minute"). Policies are in
             `RATE_LIMIT_DEFAULTS`.
+        openai_api_key: Key for the agent's language model. A secret: only ever set in the
+            environment or a git-ignored `.env`, never in code, logs or version control.
+        openai_model: Model name as your OpenAI account lists it.
+        openai_reasoning_effort: How much the model thinks before answering. Lower is faster
+            and cheaper; leave unset for models that do not support it.
+        openai_max_output_tokens: Ceiling on one model reply, thinking included.
+        openai_timeout_seconds: How long to wait for the provider before giving up.
+        openai_base_url: Only for an OpenAI-compatible server (a local model, a gateway).
         backend: Which App Store Connect implementation to use. Only the mock exists so far.
         api_clients: Static API keys (for the agent), as a JSON list in the environment.
         admin_username: The human account; also the owner every credential must share.
@@ -106,6 +114,12 @@ class Settings(BaseSettings):
     rate_limit_enabled: bool = True
     rate_limit_storage: str = "async+memory://"
     rate_limits: dict[RateLimitPolicy, str] = {}
+    openai_api_key: SecretStr | None = None
+    openai_model: str = Field(default="gpt-5-mini", min_length=1)
+    openai_reasoning_effort: Literal["minimal", "low", "medium", "high"] | None = None
+    openai_max_output_tokens: int = Field(default=2000, ge=64, le=32_000)
+    openai_timeout_seconds: float = Field(default=30, gt=0, le=300)
+    openai_base_url: str | None = None
     admin_username: str | None = Field(default=None, min_length=1, max_length=64)
     admin_password_hash: SecretStr | None = None
     access_token_ttl_minutes: int = Field(default=480, ge=1, le=1440)

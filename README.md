@@ -14,8 +14,9 @@ The project is also a hands-on comparison of two voice-agent platforms, **Eleven
 | Backend API (auth, reads, confirmed writes, analytics) | **Done**, 230+ tests, coverage floor of 90% enforced in CI |
 | App Store Connect data | **Mock only.** A real adapter is not written yet; the code runs against in-memory sample data |
 | State (sessions, pending actions, rate-limit counters) | In memory: lost on restart, single process |
-| Agent core: provider-neutral loop, tool table, limits, scripted model, injection scenario in CI | **Done**, no real model attached yet |
-| Real model adapters, voice (ElevenLabs / OpenAI), iOS client | Planned |
+| Agent core: provider-neutral loop, tool table, limits, scripted model, injection scenario in CI | **Done** |
+| OpenAI adapter for the agent | **Done**, tested without network; one opt-in live test (`make live`) |
+| Chat endpoint, evaluations, voice (ElevenLabs / OpenAI), iOS client | Planned |
 
 Nothing here talks to Apple yet. Treat the API as a complete, tested contract over mock data.
 
@@ -176,6 +177,9 @@ All settings are environment variables with the prefix `RELEASE_ASSISTANT_` (or 
 | `MAX_REQUEST_BYTES` | `65536` | Largest request body |
 | `CORS_ORIGINS` | `[]` | Exact browser origins allowed (none for native apps; `*` is refused) |
 | `DOCS_ENABLED` | `false` | Serve `/docs` and `/openapi.json` |
+| `OPENAI_API_KEY` | unset | **Secret.** The agent's language model key; only in your own git-ignored `.env` |
+| `OPENAI_MODEL`, `OPENAI_REASONING_EFFORT` | `gpt-5-mini`, unset | Model name as your account lists it; reasoning effort (`minimal` to `high`) if the model supports it |
+| `OPENAI_MAX_OUTPUT_TOKENS`, `OPENAI_TIMEOUT_SECONDS`, `OPENAI_BASE_URL` | `2000`, `30`, unset | Reply ceiling, provider timeout, and an optional OpenAI-compatible server |
 | `TRUSTED_PROXIES` | `127.0.0.1` | Proxies whose `X-Forwarded-For` is believed |
 | `HOST`, `PORT` | `127.0.0.1`, `8000` | Bind address |
 | `LOG_LEVEL`, `LOG_JSON` | `INFO`, `true` | Logging |
@@ -197,6 +201,7 @@ make install    # uv sync --frozen
 make check      # ruff, ruff format, mypy --strict, pytest with a 90% coverage floor
 make openapi    # regenerate docs/openapi.json after changing the API
 make image      # build the container image
+make live       # opt-in: run tests that call a real model (needs your key, spends tokens)
 ```
 
 A test fails if `docs/openapi.json` is out of date, and CI runs the same checks plus a container smoke test.
@@ -207,7 +212,7 @@ Adding a capability follows the layers: define or extend a port in `domain/ports
 
 1. A real App Store Connect adapter (JWT signing with the team's private key, real reports), behind the same ports.
 2. Persistence for sessions and pending actions.
-3. Real model adapters for the agent core, with evaluations: tool-call accuracy, trajectories, and a suite of injection attacks.
+3. Evaluations for the agent core on real and scripted models: tool-call accuracy, trajectories, and a suite of injection attacks.
 4. Voice: ElevenLabs and OpenAI integrated at several levels of control, with measured latency, cost and quality.
 5. A SwiftUI client.
 
@@ -222,6 +227,7 @@ Adding a capability follows the layers: define or extend a port in `domain/ports
 | [0005](docs/adr/0005-single-operator-authentication.md) | Single-operator authentication: password login, keys for the agent |
 | [0006](docs/adr/0006-abuse-protection.md) | Rate limits and request size cap |
 | [0007](docs/adr/0007-server-side-agent-core.md) | A provider-neutral agent core on the server |
+| [0008](docs/adr/0008-openai-adapter-over-chat-completions.md) | The OpenAI adapter uses Chat Completions over the agent's own history |
 
 ## License
 
