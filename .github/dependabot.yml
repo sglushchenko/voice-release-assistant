@@ -1,0 +1,40 @@
+# Weekly dependency updates, grouped so that one pull request replaces a stream of small ones.
+# Updates target `dev`, where work happens; `main` receives them with the next release merge.
+# Pinned GitHub Actions (by commit SHA) are updated here too, which is the point of pinning.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    target-branch: dev
+    schedule:
+      interval: weekly
+      day: monday
+    commit-message:
+      prefix: "ci"
+    groups:
+      actions:
+        patterns: ["*"]
+
+  # Python dependencies from backend/pyproject.toml and uv.lock.
+  - package-ecosystem: uv
+    directory: /backend
+    target-branch: dev
+    schedule:
+      interval: weekly
+      day: monday
+    commit-message:
+      prefix: "deps"
+    open-pull-requests-limit: 5
+    groups:
+      python-minor-and-patch:
+        update-types: ["minor", "patch"]
+
+  # Base images (python, uv) in backend/Dockerfile.
+  - package-ecosystem: docker
+    directory: /backend
+    target-branch: dev
+    schedule:
+      interval: weekly
+      day: monday
+    commit-message:
+      prefix: "docker"
