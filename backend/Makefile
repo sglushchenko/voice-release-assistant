@@ -1,4 +1,4 @@
-.PHONY: install check lint format typecheck test openapi run
+.PHONY: install check lint format typecheck test openapi image run
 
 install:  ## Install dependencies from the lock file
 	uv sync --frozen
@@ -21,6 +21,9 @@ test:  ## Tests with a coverage floor
 
 openapi:  ## Regenerate the committed API contract (docs/openapi.json)
 	uv run python -m release_assistant.api.openapi_export ../docs/openapi.json
+
+image:  ## Build the container image (context is the repository root)
+	docker build -f Dockerfile -t voice-release-assistant:dev ..
 
 run:  ## Start the API server (reads .env)
 	uv run release-assistant

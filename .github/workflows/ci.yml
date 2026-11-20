@@ -34,3 +34,19 @@ jobs:
         run: uv run mypy
       - name: Tests with coverage floor
         run: uv run pytest --cov
+
+  image:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build the image
+        run: docker build -f backend/Dockerfile -t voice-release-assistant:ci .
+      - name: Smoke test the running container
+        run: |
+          docker run -d --name api -p 8000:8000 voice-release-assistant:ci
+          for i in $(seq 1 20); do
+            curl -sf http://localhost:8000/healthz && exit 0
+            sleep 1
+          done
+          docker logs api
+          exit 1
