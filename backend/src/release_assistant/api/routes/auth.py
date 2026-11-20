@@ -6,7 +6,8 @@ from fastapi import APIRouter, Depends, Request, Response
 from fastapi.security import HTTPAuthorizationCredentials
 from pydantic import BaseModel, ConfigDict, Field
 
-from release_assistant.api.deps import AuthDep, PrincipalDep, bearer_scheme
+from release_assistant.api.deps import AuthDep, LimitsDep, PrincipalDep, bearer_scheme
+from release_assistant.api.ratelimit import client_address
 
 router = APIRouter(prefix="/v1/auth", tags=["auth"])
 
@@ -33,11 +34,13 @@ class Me(BaseModel):
 
 @router.post("/login")
 async def login(
-    body: LoginRequest, request: Request, response: Response, auth: AuthDep
+    body: LoginRequest, request: Request, response: Response, auth: AuthDep, limits: LimitsDep
 ) -> TokenResponse:
     """Exchange the admin username and password for a bearer token (8 hours by default,
-    extended by each use). Repeated failures lock the client address out."""
-    client = request.client.host if request.client else "unknown"
+    extended by each use). Attempts are rate limited before any hashing happens, and repeated
+    failures lock the client address out."""
+    client = client_address(request)
+    limits.enforce("login", client)
     result = await auth.login(body.username, body.password, client)
     response.headers["Cache-Control"] = "no-store"
     return TokenResponse(access_token=result.access_token, expires_in=result.expires_in)

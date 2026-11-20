@@ -10,6 +10,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from release_assistant.api.auth import Principal
 from release_assistant.api.errors import ApiError
 from release_assistant.api.login import AuthService
+from release_assistant.api.ratelimit import RateLimits
 from release_assistant.bootstrap import Application
 
 log = structlog.get_logger(__name__)
@@ -47,7 +48,15 @@ async def get_principal(
         raise ApiError(401, "unauthorized", "Invalid bearer token", _UNAUTHORIZED)
     structlog.contextvars.bind_contextvars(subject=principal.subject, owner=principal.owner)
     request.state.subject = principal.subject
+    request.app.state.limits.enforce("principal", principal.subject)
     return principal
+
+
+def get_limits(request: Request) -> RateLimits:
+    return request.app.state.limits
+
+
+LimitsDep = Annotated[RateLimits, Depends(get_limits)]
 
 
 PrincipalDep = Annotated[Principal, Depends(get_principal)]

@@ -43,6 +43,13 @@ class Settings(BaseSettings):
         host: Interface the server binds to. Loopback by default; bind wider only behind a
             reverse proxy that terminates TLS.
         port: Port the server listens on.
+        trusted_proxies: Comma-separated addresses whose `X-Forwarded-For` is believed, so the
+            real client address is used for limits and lockouts. Set to the reverse proxy.
+        max_request_bytes: Largest request body accepted.
+        rate_limit_*: Token-bucket limits (ADR 0006): `per_second` or `per_minute` is the
+            steady rate, `burst` the allowance for short spikes. `ip` covers every request
+            from one address, `principal` each authenticated caller, `login` password
+            attempts per address, `propose` action proposals per caller.
         backend: Which App Store Connect implementation to use. Only the mock exists so far.
         api_clients: Static API keys (for the agent), as a JSON list in the environment.
         admin_username: The human account; also the owner every credential must share.
@@ -65,6 +72,17 @@ class Settings(BaseSettings):
     port: int = Field(default=8000, ge=1, le=65535)
     backend: Literal["mock"] = "mock"
     api_clients: list[ApiClient] = []
+    trusted_proxies: str = "127.0.0.1"
+    max_request_bytes: int = Field(default=65_536, ge=1024)
+    rate_limit_enabled: bool = True
+    rate_limit_ip_per_second: float = Field(default=10, gt=0)
+    rate_limit_ip_burst: int = Field(default=30, ge=1)
+    rate_limit_principal_per_second: float = Field(default=10, gt=0)
+    rate_limit_principal_burst: int = Field(default=30, ge=1)
+    rate_limit_login_per_minute: float = Field(default=10, gt=0)
+    rate_limit_login_burst: int = Field(default=5, ge=1)
+    rate_limit_propose_per_minute: float = Field(default=30, gt=0)
+    rate_limit_propose_burst: int = Field(default=10, ge=1)
     admin_username: str | None = Field(default=None, min_length=1, max_length=64)
     admin_password_hash: SecretStr | None = None
     access_token_ttl_minutes: int = Field(default=480, ge=1, le=1440)

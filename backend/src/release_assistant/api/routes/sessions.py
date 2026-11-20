@@ -11,7 +11,7 @@ from fastapi import APIRouter, Depends, Query, Response
 from pydantic import BaseModel, ConfigDict, Field
 
 from release_assistant.api.auth import Principal
-from release_assistant.api.deps import ApplicationDep, require_scope
+from release_assistant.api.deps import ApplicationDep, LimitsDep, require_scope
 from release_assistant.application.pending import PendingAction
 from release_assistant.application.service import Executed
 from release_assistant.domain.entities import CustomerReview
@@ -93,8 +93,11 @@ async def propose_action(
     application: ApplicationDep,
     principal: ProposePrincipal,
     response: Response,
+    limits: LimitsDep,
 ) -> ActionOutcome:
-    """Propose a write. The reply is 202 with `pending` when a person must confirm."""
+    """Propose a write. The reply is 202 with `pending` when a person must confirm. Each
+    proposal creates state and audit records, so it has its own, tighter limit."""
+    limits.enforce("propose", principal.subject)
     session = application.sessions.get(session_id, principal.owner)
     outcome = await session.propose(body.action, body.arguments)
     if isinstance(outcome, Executed):

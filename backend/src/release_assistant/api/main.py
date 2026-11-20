@@ -39,6 +39,8 @@ def run() -> None:
         create_app(settings),
         host=settings.host,
         port=settings.port,
+        proxy_headers=True,
+        forwarded_allow_ips=settings.trusted_proxies,
         log_config=None,
         access_log=False,
     )
