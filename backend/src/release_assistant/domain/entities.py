@@ -32,6 +32,8 @@ class AppStoreVersionState(StrEnum):
     REJECTED = "REJECTED"
     PENDING_DEVELOPER_RELEASE = "PENDING_DEVELOPER_RELEASE"
     READY_FOR_SALE = "READY_FOR_SALE"
+    # Any other state Apple reports; the exact value is kept in `AppStoreVersion.apple_state`.
+    OTHER = "OTHER"
 
 
 class ReviewResponseState(StrEnum):
@@ -112,10 +114,14 @@ class Build(Entity):
 
 
 class AppStoreVersion(Entity):
+    """`state` is Apple's state mapped onto a few values the assistant reasons about;
+    `apple_state` is the exact value Apple reported, set by real backends."""
+
     id: str
     app_id: str
     version_string: str
     state: AppStoreVersionState
+    apple_state: str | None = None
 
 
 class BetaGroup(Entity):
@@ -143,7 +149,7 @@ class CustomerReview(Entity):
     as untrusted input everywhere they are passed to a model (see ADR 0003)."""
 
     id: str
-    app_id: str
+    app_id: str | None = None  # unknown when fetched by id: Apple's review does not name its app
     rating: int = Field(ge=1, le=5)
     title: str
     body: str

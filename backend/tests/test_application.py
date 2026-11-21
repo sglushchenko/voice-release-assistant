@@ -78,3 +78,17 @@ async def test_overrides_tighten_but_cannot_loosen_below_the_floor() -> None:
     assert add.mode is ApprovalMode.BUTTON_ONLY
     assert isinstance(remove, PendingAction)
     assert remove.mode is ApprovalMode.BUTTON_ONLY
+
+
+async def test_a_backend_without_writes_refuses_every_write_but_still_reads() -> None:
+    from release_assistant.application.reviews import RESPOND_TO_REVIEW
+    from release_assistant.application.testers import ADD_TESTER, REMOVE_TESTER
+    from release_assistant.domain.errors import NotSupportedError
+
+    app = build_application(sample_gateway(), writes_enabled=False)
+    _, session = app.sessions.create(OWNER)
+
+    assert [a.name for a in await app.apps.list_apps()] == ["Pocket Notes", "Habit Garden"]
+    for name in (ADD_TESTER, REMOVE_TESTER, RESPOND_TO_REVIEW):
+        with pytest.raises(NotSupportedError):
+            await session.propose(name, {})

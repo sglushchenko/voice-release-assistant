@@ -12,11 +12,16 @@ The project is also a hands-on comparison of two voice-agent platforms, **Eleven
 | | |
 |---|---|
 | Backend API (auth, reads, confirmed writes, analytics) | **Done**, 230+ tests, coverage floor of 90% enforced in CI |
-| App Store Connect data | **Mock only.** A real adapter is not written yet; the code runs against in-memory sample data |
+| App Store Connect data | Mock by default. A **real read-only adapter** (apps, versions, builds, TestFlight, reviews, and sales/downloads with a vendor number) is selectable; writes and engagement analytics answer "not supported yet" ([ADR 0010](docs/adr/0010-real-app-store-connect-backend-read-only.md)) |
 | State (sessions, pending actions, rate-limit counters) | In memory: lost on restart, single process |
-| LLM agent layer, voice (ElevenLabs / OpenAI), iOS client | Planned |
+| Agent core: provider-neutral loop, tool table, limits, scripted model, injection scenario in CI | **Done** |
+| OpenAI adapter for the agent | **Done**, tested without network; one opt-in live test (`make live`) |
+| Evaluations: scripted tier gates CI, LLM tier run by hand, history of results | **Done**, see [evals](evals/README.md); no real-model run recorded yet |
+| Terminal chat with the agent (`make chat`) | **Done** |
+| Chat endpoint `POST /v1/chat` (text, per-account token budget) | **Done** ([ADR 0012](docs/adr/0012-chat-endpoint.md)) |
+| Langfuse tracing, voice (ElevenLabs / OpenAI), iOS client | Planned |
 
-Nothing here talks to Apple yet. Treat the API as a complete, tested contract over mock data.
+The real backend is read-only by design: nothing in this repository changes your App Store Connect account yet.
 
 ## Highlights
 
@@ -62,12 +67,14 @@ How strictly an action is approved depends on its risk tier (read, reversible, p
 |---|---|
 | `backend/src/release_assistant/domain/` | Entities, ports (protocols), domain errors |
 | `backend/src/release_assistant/application/` | Services per area (apps, builds, testers, reviews, sales, engagement), risk and confirmation policy, sessions, trust tracking |
-| `backend/src/release_assistant/infrastructure/` | In-memory App Store Connect gateway and fixtures, pending-action store |
+| `backend/src/release_assistant/infrastructure/` | In-memory gateway and fixtures, the read-only App Store Connect adapter (`appstoreconnect/`), composite gateway, pending-action store |
 | `backend/src/release_assistant/api/` | FastAPI app: routes, authentication, rate limiting, middleware |
+| `backend/src/release_assistant/agent/` | Agent core: loop, tool table, HTTP tool backend, conversation store, scripted model |
 | `backend/src/release_assistant/observability/` | Structured logging setup |
 | `docs/adr/` | Architecture Decision Records |
 | `docs/openapi.json` | The API contract, checked by a test |
-| `ios/`, `evals/`, `benchmarks/` | Placeholders for the client, agent evaluations and provider comparison |
+| `evals/` | Evaluation cases, the scripted baseline and the history of results ([details](evals/README.md)) |
+| `ios/`, `benchmarks/` | Placeholders for the client and the provider comparison |
 
 ## Quick start
 
@@ -111,6 +118,16 @@ or in a hardened container, from the repository root:
 docker compose up --build                 # published on 127.0.0.1:8000 only
 ```
 
+### Chat with the agent in a terminal
+
+With `RELEASE_ASSISTANT_OPENAI_API_KEY` in your `.env` (it spends a few cents of tokens):
+
+```bash
+cd backend && make chat
+```
+
+It runs the real API in process; the agent can read and propose, and only you can approve with `/confirm <id>`. `/trace` shows which tools ran, `/pending` lists waiting changes, `/help` the rest. Select the real account with `RELEASE_ASSISTANT_BACKEND=appstoreconnect` (read-only) and check it first with `make live-asc`.
+
 ### 3. Try it
 
 ```bash
@@ -152,10 +169,20 @@ The contract is [`docs/openapi.json`](docs/openapi.json); generate a client from
 | TestFlight | `GET /v1/apps/{id}/beta-groups`, `/v1/beta-groups/{id}/testers` |
 | Reports | `GET /v1/reports/sales/monthly`, `/v1/reports/engagement`, `/v1/reports/engagement/recent` |
 | Sessions and reviews | `POST /v1/sessions`, `GET /v1/sessions/{id}/apps/{app}/reviews[/unanswered]` (reviews are labelled `trust: untrusted`) |
+| Chat | `POST /v1/chat` (needs the `chat` scope; a login has it) |
 | Writes | `POST /v1/sessions/{id}/actions` (propose), `GET /v1/actions[/{id}]`, `POST /v1/actions/{id}/confirm`, `POST /v1/actions/{id}/reject` |
 | Ops | `GET /healthz` |
 
 Available actions: `add_tester`, `remove_tester`, `respond_to_review`.
+
+### Chat
+
+```bash
+curl -s localhost:8000/v1/chat -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  -d '{"message": "Which apps do I have?"}'
+```
+
+The reply carries `answer`, a `conversation_id` to send back for the next message, token `usage`, and `pending_actions`: changes the agent proposed, described by the server and waiting for `POST /v1/actions/{id}/confirm`. A client should show those, not the model's words. Without `RELEASE_ASSISTANT_OPENAI_API_KEY` the route answers 503. Conversations live in memory and end with the server or after 30 idle minutes (404; start a new one). Each account may spend `CHAT_DAILY_TOKEN_BUDGET` model tokens a day (429 `budget_exceeded` after that).
 
 Sales figures are **estimates** from Sales and Trends, kept per currency and never summed across currencies; engagement figures (impressions, page views) come from a different Apple source and report how much of the requested period is actually published.
 
@@ -174,11 +201,19 @@ All settings are environment variables with the prefix `RELEASE_ASSISTANT_` (or 
 | `MAX_REQUEST_BYTES` | `65536` | Largest request body |
 | `CORS_ORIGINS` | `[]` | Exact browser origins allowed (none for native apps; `*` is refused) |
 | `DOCS_ENABLED` | `false` | Serve `/docs` and `/openapi.json` |
+| `OPENAI_API_KEY` | unset | **Secret.** The agent's language model key; only in your own git-ignored `.env` |
+| `OPENAI_MODEL`, `OPENAI_REASONING_EFFORT` | `gpt-5-mini`, unset | Model name as your account lists it; reasoning effort (`minimal` to `high`) if the model supports it |
+| `OPENAI_MAX_OUTPUT_TOKENS`, `OPENAI_TIMEOUT_SECONDS`, `OPENAI_BASE_URL` | `2000`, `30`, unset | Reply ceiling, provider timeout, and an optional OpenAI-compatible server |
+| `BACKEND` | `mock` | `mock` or `appstoreconnect` (read-only); the latter also needs the three below |
+| `APPSTORE_KEY_ID`, `APPSTORE_ISSUER_ID`, `APPSTORE_PRIVATE_KEY_PATH` | unset | App Store Connect API key; the `.p8` is a **secret** kept outside the repo with owner-only permissions |
+| `APPSTORE_VENDOR_NUMBER` | unset | Digits from Payments and Financial Reports; enables real sales and downloads (the key needs a Sales-capable role) |
+| `APPSTORE_TIMEOUT_SECONDS` | `20` | Per-request timeout |
+| `CHAT_DAILY_TOKEN_BUDGET` | `500000` | Model tokens one account may spend per UTC day through `/v1/chat` |
 | `TRUSTED_PROXIES` | `127.0.0.1` | Proxies whose `X-Forwarded-For` is believed |
 | `HOST`, `PORT` | `127.0.0.1`, `8000` | Bind address |
 | `LOG_LEVEL`, `LOG_JSON` | `INFO`, `true` | Logging |
 
-Rate-limit policies and defaults: `ip` 20/second, `principal` 20/second, `login` 10/minute, `propose` 30/minute, `reports` 20/minute, `reviews` 60/minute.
+Rate-limit policies and defaults: `ip` 20/second, `principal` 20/second, `login` 10/minute, `propose` 30/minute, `reports` 20/minute, `reviews` 60/minute, `chat` 10/minute.
 
 ### Deployment notes
 
@@ -195,6 +230,10 @@ make install    # uv sync --frozen
 make check      # ruff, ruff format, mypy --strict, pytest with a 90% coverage floor
 make openapi    # regenerate docs/openapi.json after changing the API
 make image      # build the container image
+make live       # opt-in: run tests that call a real model (needs your key, spends tokens)
+make eval       # scripted evaluations against the baseline (free, offline; what CI runs)
+make eval-llm   # evaluations with a real model (spends tokens, run rarely, appends to evals/history.csv)
+make eval-compare  # compare the two newest LLM runs case by case
 ```
 
 A test fails if `docs/openapi.json` is out of date, and CI runs the same checks plus a container smoke test.
@@ -203,11 +242,16 @@ Adding a capability follows the layers: define or extend a port in `domain/ports
 
 ## Roadmap
 
-1. A real App Store Connect adapter (JWT signing with the team's private key, real reports), behind the same ports.
+1. Real App Store Connect: engagement analytics (impressions, page views) and, behind an explicit switch, writes. Reading, including sales and downloads, is done.
 2. Persistence for sessions and pending actions.
-3. An LLM agent layer with tools over this API, with evaluations: tool-call accuracy, trajectories, and a suite of injection attacks.
+3. Tracing with Langfuse.
 4. Voice: ElevenLabs and OpenAI integrated at several levels of control, with measured latency, cost and quality.
 5. A SwiftUI client.
+
+### Known issues
+
+- **"Latest build" can be wrong on a real account.** `BuildService.latest` trusts the adapter's order instead of sorting by `uploaded_at` itself; on one real app it returned a 2019 build although a newer one may exist. Cause not yet confirmed (order not applied by Apple, or the newer build belongs to another app). Fix: sort in the application layer and add a real-data eval case.
+- **Per-step latency and cached tokens are not reported** by `/v1/chat`, so a slow answer cannot yet be attributed to the model or to App Store Connect.
 
 ## Architecture decisions
 
@@ -219,6 +263,12 @@ Adding a capability follows the layers: define or extend a port in `domain/ports
 | [0004](docs/adr/0004-http-api-authentication-and-authority.md) | Scoped credentials decide who may confirm what |
 | [0005](docs/adr/0005-single-operator-authentication.md) | Single-operator authentication: password login, keys for the agent |
 | [0006](docs/adr/0006-abuse-protection.md) | Rate limits and request size cap |
+| [0007](docs/adr/0007-server-side-agent-core.md) | A provider-neutral agent core on the server |
+| [0008](docs/adr/0008-openai-adapter-over-chat-completions.md) | The OpenAI adapter uses Chat Completions over the agent's own history |
+| [0009](docs/adr/0009-evaluation-tiers-and-history.md) | Evaluations in two tiers, with a history that shows progress |
+| [0010](docs/adr/0010-real-app-store-connect-backend-read-only.md) | The real App Store Connect backend starts read-only |
+| [0012](docs/adr/0012-chat-endpoint.md) | A chat endpoint whose agent is an ordinary, less-privileged API client |
+| [0011](docs/adr/0011-sales-and-trends-and-deferred-analytics.md) | Sales and downloads from Sales and Trends; engagement analytics deferred until their format is observed |
 
 ## License
 

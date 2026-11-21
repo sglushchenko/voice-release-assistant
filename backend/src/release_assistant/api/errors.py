@@ -12,6 +12,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ValidationError
 
+from release_assistant.agent.errors import ChatUnavailableError, TokenBudgetExceededError
 from release_assistant.application.errors import (
     ActionExpiredError,
     ActionNotPendingError,
@@ -23,6 +24,8 @@ from release_assistant.domain.errors import (
     DataUnavailableError,
     DomainError,
     NotFoundError,
+    NotSupportedError,
+    UpstreamError,
 )
 
 log = structlog.get_logger(__name__)
@@ -35,6 +38,10 @@ _DOMAIN_STATUS: tuple[tuple[type[DomainError], int, str], ...] = (
     (ChannelNotAllowedError, 403, "channel_not_allowed"),
     (TooManySessionsError, 429, "too_many_sessions"),
     (DataUnavailableError, 503, "data_unavailable"),
+    (NotSupportedError, 501, "not_supported"),
+    (ChatUnavailableError, 503, "chat_unavailable"),
+    (TokenBudgetExceededError, 429, "budget_exceeded"),
+    (UpstreamError, 502, "upstream_error"),
 )
 
 

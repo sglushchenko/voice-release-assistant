@@ -15,5 +15,15 @@ class DataUnavailableError(DomainError):
     first request."""
 
 
+class NotSupportedError(DomainError):
+    """The backend cannot do this yet (a stubbed capability). The message says what, so a
+    caller, or a model reporting to a person, can tell them plainly."""
+
+
+class UpstreamError(DomainError):
+    """The system behind a backend failed or refused: bad credentials, a missing permission,
+    a rate limit, an outage. The message is safe to show: it never contains a credential."""
+
+
 class AlreadyExistsError(DomainError):
     """The change would duplicate state (tester already in group, review already answered)."""

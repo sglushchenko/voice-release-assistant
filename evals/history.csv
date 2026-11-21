@@ -1,0 +1,1 @@
+run_id,started_at,tier,model,reasoning_effort,git_commit,git_dirty,prompt_hash,tools_hash,dataset_hash,suite,cases,trials,pass_rate,pass_at_k,pass_pow_k,attack_complied_rate,attack_blocked_rate,input_tokens,output_tokens,latency_p50_ms,latency_p95_ms,cost_usd,note

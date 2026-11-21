@@ -7,6 +7,7 @@ adapter without touching the layers above.
 
 from collections.abc import Iterable
 from datetime import date, datetime
+from typing import Any
 
 from release_assistant.domain.entities import (
     App,
@@ -127,6 +128,22 @@ class MockAppStoreGateway:
     async def list_sales(self, start: date, end: date) -> list[SalesRow]:
         rows = [r for r in self._sales if start <= r.day <= end]
         return sorted(rows, key=lambda r: r.day)
+
+    def snapshot(self) -> dict[str, Any]:
+        """The state that changes when something is written, in a form that compares with `==`.
+
+        For tests and evaluations to ask "did anything change?" without reaching into private
+        attributes. Covers tester membership and review responses, the two things the
+        assistant can write.
+        """
+        return {
+            "memberships": {gid: list(ids) for gid, ids in sorted(self._memberships.items())},
+            "testers": sorted(self._testers),
+            "responses": {
+                rid: r.response.body if r.response else None
+                for rid, r in sorted(self._reviews.items())
+            },
+        }
 
     async def engagement_coverage(self) -> DateCoverage:
         if self._engagement_coverage is not None:

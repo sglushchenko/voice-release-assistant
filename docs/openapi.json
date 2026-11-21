@@ -66,10 +66,22 @@
         "type": "object"
       },
       "AppStoreVersion": {
+        "description": "`state` is Apple's state mapped onto a few values the assistant reasons about;\n`apple_state` is the exact value Apple reported, set by real backends.",
         "properties": {
           "app_id": {
             "title": "App Id",
             "type": "string"
+          },
+          "apple_state": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Apple State"
           },
           "id": {
             "title": "Id",
@@ -99,7 +111,8 @@
           "IN_REVIEW",
           "REJECTED",
           "PENDING_DEVELOPER_RELEASE",
-          "READY_FOR_SALE"
+          "READY_FOR_SALE",
+          "OTHER"
         ],
         "title": "AppStoreVersionState",
         "type": "string"
@@ -267,6 +280,98 @@
         "title": "BuildProcessingState",
         "type": "string"
       },
+      "ChatRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "conversation_id": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Omit to start a conversation; send the id from a reply to continue it.",
+            "title": "Conversation Id"
+          },
+          "message": {
+            "maxLength": 4000,
+            "minLength": 1,
+            "title": "Message",
+            "type": "string"
+          }
+        },
+        "required": [
+          "message"
+        ],
+        "title": "ChatRequest",
+        "type": "object"
+      },
+      "ChatResponse": {
+        "description": "`stop_reason` other than `answered` means the server stopped the run and `answer` is a\nfixed message. `pending_actions` are the server's record of what awaits approval.",
+        "properties": {
+          "answer": {
+            "title": "Answer",
+            "type": "string"
+          },
+          "conversation_id": {
+            "title": "Conversation Id",
+            "type": "string"
+          },
+          "pending_actions": {
+            "items": {
+              "$ref": "#/components/schemas/PendingAction"
+            },
+            "title": "Pending Actions",
+            "type": "array"
+          },
+          "steps": {
+            "title": "Steps",
+            "type": "integer"
+          },
+          "stop_reason": {
+            "$ref": "#/components/schemas/StopReason"
+          },
+          "tool_calls": {
+            "title": "Tool Calls",
+            "type": "integer"
+          },
+          "usage": {
+            "$ref": "#/components/schemas/ChatUsage"
+          }
+        },
+        "required": [
+          "conversation_id",
+          "answer",
+          "stop_reason",
+          "steps",
+          "tool_calls",
+          "usage",
+          "pending_actions"
+        ],
+        "title": "ChatResponse",
+        "type": "object"
+      },
+      "ChatUsage": {
+        "properties": {
+          "input_tokens": {
+            "title": "Input Tokens",
+            "type": "integer"
+          },
+          "output_tokens": {
+            "title": "Output Tokens",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "input_tokens",
+          "output_tokens"
+        ],
+        "title": "ChatUsage",
+        "type": "object"
+      },
       "ConfirmRequest": {
         "additionalProperties": false,
         "properties": {
@@ -293,8 +398,15 @@
         "description": "A public review. `title` and `body` are written by third parties and must be treated\nas untrusted input everywhere they are passed to a model (see ADR 0003).",
         "properties": {
           "app_id": {
-            "title": "App Id",
-            "type": "string"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "App Id"
           },
           "body": {
             "title": "Body",
@@ -336,7 +448,6 @@
         },
         "required": [
           "id",
-          "app_id",
           "rating",
           "title",
           "body",
@@ -954,6 +1065,17 @@
         ],
         "title": "SessionCreated",
         "type": "object"
+      },
+      "StopReason": {
+        "description": "Why a run ended. Anything but ANSWERED means the loop stopped it, not the model.",
+        "enum": [
+          "answered",
+          "step_limit",
+          "token_budget",
+          "model_error"
+        ],
+        "title": "StopReason",
+        "type": "string"
       },
       "TerritoryTotal": {
         "properties": {
@@ -2176,6 +2298,92 @@
         "summary": "List Testers",
         "tags": [
           "testers"
+        ]
+      }
+    },
+    "/v1/chat": {
+      "post": {
+        "operationId": "chat_send_message",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChatRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Missing or invalid credentials"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "The credential lacks the required scope"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not found, or not yours"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Rate limit exceeded; see Retry-After"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Send Message",
+        "tags": [
+          "chat"
         ]
       }
     },

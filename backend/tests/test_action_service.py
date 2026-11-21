@@ -239,3 +239,21 @@ def test_read_actions_cannot_be_registered_for_confirmation() -> None:
             describe=describe,
             handler=handler,
         )
+
+
+async def test_a_disabled_action_is_refused_up_front_and_nothing_is_stored() -> None:
+    from release_assistant.domain.errors import NotSupportedError
+
+    h = Harness(ApprovalMode.BUTTON_ONLY)
+    service = ActionService(
+        definitions=list(h.service._definitions.values()),
+        policy=ConfirmationPolicy({"touch": ApprovalMode.BUTTON_ONLY}),
+        store=h.store,
+        disabled_actions=["touch"],
+        clock=h.clock,
+    )
+
+    with pytest.raises(NotSupportedError, match="not supported by this backend yet"):
+        await service.propose("touch", {"target": "x"}, owner=OWNER)
+
+    assert await h.store.list_for_owner(OWNER) == []

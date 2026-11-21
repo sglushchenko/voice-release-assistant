@@ -227,3 +227,24 @@ def test_the_session_limit_returns_429(client: TestClient) -> None:
 
 def test_session_creation_requires_credentials(client: TestClient) -> None:
     assert client.post("/v1/sessions").status_code == 401
+
+
+def test_a_backend_without_writes_answers_501_with_a_clear_code() -> None:
+    from release_assistant.bootstrap import build_application
+    from release_assistant.infrastructure.fixtures import sample_gateway
+
+    settings = Settings(
+        _env_file=None,
+        api_clients=[api_client("agent", "alice", "agent-key", "read", "propose")],
+    )
+    application = build_application(sample_gateway(), writes_enabled=False)
+    client = TestClient(create_app(settings, application))
+    session_id = client.post("/v1/sessions", headers=AGENT).json()["session_id"]
+
+    response = client.post(f"/v1/sessions/{session_id}/actions", json=ADD_TESTER, headers=AGENT)
+    reads = client.get("/v1/apps", headers=AGENT)
+
+    assert response.status_code == 501
+    assert response.json()["code"] == "not_supported"
+    assert "not supported by this backend yet" in response.json()["detail"]
+    assert reads.status_code == 200

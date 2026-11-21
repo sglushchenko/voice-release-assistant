@@ -1,5 +1,6 @@
 """Shared sample data. Evals and tests reuse it so results stay comparable across runs."""
 
+from collections.abc import Sequence
 from datetime import UTC, date, datetime
 from decimal import Decimal
 
@@ -83,8 +84,13 @@ def _sample_engagement() -> list[EngagementRow]:
     ]
 
 
-def sample_gateway() -> MockAppStoreGateway:
-    """Fresh gateway per call; mutations in one test never leak into another."""
+def sample_gateway(extra_reviews: Sequence[CustomerReview] = ()) -> MockAppStoreGateway:
+    """Fresh gateway per call; mutations in one test never leak into another.
+
+    Args:
+        extra_reviews: Added to the sample reviews, for scenarios that need specific review
+            text (for example a prompt-injection attempt).
+    """
     return MockAppStoreGateway(
         apps=[
             App(id="app-1", name="Pocket Notes", bundle_id="com.example.pocketnotes"),
@@ -176,5 +182,6 @@ def sample_gateway() -> MockAppStoreGateway:
                 territory="GBR",
                 created_at=datetime(2026, 11, 10, 7, 20, tzinfo=UTC),
             ),
+            *extra_reviews,
         ],
     )

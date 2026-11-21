@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="dark" />
+    <title>Release assistant</title>
+    <script type="module" src="/src/main.js"></script>
+  </head>
+  <body>
+    <main class="app">
+      <header class="bar">
+        <h1>Release assistant</h1>
+        <button id="open-settings" class="icon-button" aria-label="Settings" type="button">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Zm7.4-2.6 1.7 1.3-1.7 3-2-.8a7.6 7.6 0 0 1-1.7 1l-.3 2.1h-3.4l-.3-2.1a7.6 7.6 0 0 1-1.7-1l-2 .8-1.7-3 1.7-1.3a7.7 7.7 0 0 1 0-2l-1.7-1.3 1.7-3 2 .8a7.6 7.6 0 0 1 1.7-1l.3-2.1h3.4l.3 2.1a7.6 7.6 0 0 1 1.7 1l2-.8 1.7 3-1.7 1.3a7.7 7.7 0 0 1 0 2Z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>
+        </button>
+      </header>
+
+      <section class="stage" aria-label="Conversation state">
+        <div class="orb-wrap">
+          <div id="orb" class="orb" data-state="idle">
+            <div class="glow"></div>
+            <div class="sphere"><i></i><i></i><i></i></div>
+          </div>
+        </div>
+        <p id="state" class="state" role="status">Ready when you are</p>
+        <p id="latency" class="latency" hidden></p>
+      </section>
+
+      <section id="log" class="log" aria-live="polite" aria-label="Transcript">
+        <p id="empty" class="empty">
+          Ask about builds, review status or TestFlight. Log in under Settings so the assistant can read your data.
+        </p>
+      </section>
+
+      <footer class="dock">
+        <button id="mute" class="icon-button" type="button" aria-pressed="false" aria-label="Mute microphone" disabled>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15a3 3 0 0 0 3-3V7a3 3 0 1 0-6 0v5a3 3 0 0 0 3 3Zm-6-3a6 6 0 0 0 12 0M12 18v3" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><path id="mute-slash" d="M4 4l16 16" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" hidden/></svg>
+        </button>
+        <button id="talk" class="talk" type="button">Start talking</button>
+      </footer>
+    </main>
+
+    <dialog id="settings" class="settings">
+      <form method="dialog" id="settings-form">
+        <h2>Settings</h2>
+        <label>Agent ID
+          <input id="agent" placeholder="agent_…" autocomplete="off" spellcheck="false" />
+        </label>
+        <p class="hint">The agent ID is not a secret. It is stored in this browser.</p>
+        <label>Username
+          <input id="user" autocomplete="username" />
+        </label>
+        <label>Password
+          <input id="password" type="password" autocomplete="current-password" />
+        </label>
+        <p id="login-state" class="hint">Not logged in. The assistant can talk but has no data.</p>
+        <div class="actions">
+          <button id="login" type="button" class="secondary">Log in</button>
+          <button value="close" class="primary">Done</button>
+        </div>
+      </form>
+    </dialog>
+  </body>
+</html>

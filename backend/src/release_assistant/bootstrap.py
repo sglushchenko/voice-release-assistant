@@ -23,9 +23,13 @@ from release_assistant.application.service import ActionService, Executed
 from release_assistant.application.sessions import SessionRegistry
 from release_assistant.application.testers import BetaTesterService
 from release_assistant.application.trust import TrustTracker
+from release_assistant.config import Settings
 from release_assistant.domain.ports import AppStoreGateway
+from release_assistant.infrastructure.appstoreconnect.factory import create_appstoreconnect_gateway
 from release_assistant.infrastructure.fixtures import sample_gateway
 from release_assistant.infrastructure.pending_store import InMemoryPendingActionStore
+
+WRITE_ACTIONS = (testers.ADD_TESTER, testers.REMOVE_TESTER, reviews.RESPOND_TO_REVIEW)
 
 
 class Session:
@@ -71,6 +75,7 @@ def build_application(
     *,
     store: PendingActionStore | None = None,
     approval_modes: Mapping[str, ApprovalMode] | None = None,
+    writes_enabled: bool = True,
 ) -> Application:
     """Wire the application around `gateway`.
 
@@ -78,6 +83,8 @@ def build_application(
         gateway: Mock or real App Store Connect adapter.
         store: Where pending actions live. Defaults to in memory, which loses them on
             restart and does not work across multiple processes.
+        writes_enabled: False for a backend that cannot change anything yet: proposing any write
+            is then refused up front as not supported.
         approval_modes: Overrides for the per-action defaults. The policy still clamps them
             to each action's risk floor, so an override can tighten but never loosen safely.
     """
@@ -93,6 +100,7 @@ def build_application(
         ],
         policy=ConfirmationPolicy(modes),
         store=store or InMemoryPendingActionStore(),
+        disabled_actions=() if writes_enabled else WRITE_ACTIONS,
     )
     return Application(
         apps=AppsService(gateway),
@@ -103,6 +111,17 @@ def build_application(
         actions=actions,
         sessions=SessionRegistry(lambda owner: Session(owner, actions, gateway)),
     )
+
+
+def build_application_from_settings(settings: Settings) -> Application:
+    """The application the configuration asks for.
+
+    `mock` is sample data with every capability. `appstoreconnect` is the real service, which
+    for now can only read: writes are refused up front and reports say they are not supported.
+    """
+    if settings.backend == "mock":
+        return build_mock_application()
+    return build_application(create_appstoreconnect_gateway(settings), writes_enabled=False)
 
 
 def build_mock_application() -> Application:

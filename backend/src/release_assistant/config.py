@@ -5,6 +5,7 @@ which is git-ignored. See `.env.example` for the full list.
 """
 
 import re
+from pathlib import Path
 from typing import Literal
 
 from argon2 import extract_parameters
@@ -13,15 +14,22 @@ from limits import parse_many
 from pydantic import BaseModel, Field, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-Scope = Literal["read", "propose", "confirm:button", "confirm:voice"]
+Scope = Literal["read", "propose", "chat", "confirm:button", "confirm:voice"]
+
+
+class ConfigurationError(Exception):
+    """The configuration cannot be used (a missing or unsafe key file, a missing setting). The
+    message names what to fix and never contains a secret."""
+
 
 _ORIGIN = re.compile(r"https?://[A-Za-z0-9.-]+(:[0-9]{1,5})?")
 
-RateLimitPolicy = Literal["ip", "principal", "login", "propose", "reports", "reviews"]
+RateLimitPolicy = Literal["ip", "principal", "login", "propose", "reports", "reviews", "chat"]
 
 # What each policy limits: `ip` every request from one address, `principal` every
 # authenticated call by one caller, `login` password attempts per address, `propose` action
-# proposals per caller, `reports` analytics reads per caller, `reviews` review reads per caller.
+# proposals per caller, `reports` analytics reads per caller, `reviews` review reads per caller,
+# `chat` messages to the agent per caller (each one can spend model tokens).
 RATE_LIMIT_DEFAULTS: dict[RateLimitPolicy, str] = {
     "ip": "20/second",
     "principal": "20/second",
@@ -29,6 +37,7 @@ RATE_LIMIT_DEFAULTS: dict[RateLimitPolicy, str] = {
     "propose": "30/minute",
     "reports": "20/minute",
     "reviews": "60/minute",
+    "chat": "10/minute",
 }
 
 
@@ -77,7 +86,26 @@ class Settings(BaseSettings):
         rate_limits: Overrides for the default limits, by policy name, written as
             "10/minute" or several joined by ";" ("20/second;600/minute"). Policies are in
             `RATE_LIMIT_DEFAULTS`.
-        backend: Which App Store Connect implementation to use. Only the mock exists so far.
+        openai_api_key: Key for the agent's language model. A secret: only ever set in the
+            environment or a git-ignored `.env`, never in code, logs or version control.
+        openai_model: Model name as your OpenAI account lists it.
+        openai_reasoning_effort: How much the model thinks before answering. Lower is faster
+            and cheaper; leave unset for models that do not support it.
+        openai_max_output_tokens: Ceiling on one model reply, thinking included.
+        openai_timeout_seconds: How long to wait for the provider before giving up.
+        openai_base_url: Only for an OpenAI-compatible server (a local model, a gateway).
+        openai_price_*_per_million: What the model costs per million tokens, in dollars, used
+            only to estimate the cost of evaluation runs. Left unset, no cost is shown: prices
+            change, so the repository does not hard-code them.
+        backend: Which App Store Connect implementation to use: `mock` (sample data) or
+            `appstoreconnect` (the real service, read-only for now).
+        appstore_key_id: The API key's Key ID (App Store Connect > Users and Access > Keys).
+        appstore_issuer_id: The team's Issuer ID, shown on the same page.
+        appstore_private_key_path: Path to the downloaded `AuthKey_<KeyID>.p8`. Keep it outside
+            the repository with owner-only permissions; only the path is configuration.
+        appstore_vendor_number: Vendor number (Payments and Financial Reports), needed to read
+            sales and downloads. Unset leaves those answering "not supported yet".
+        appstore_timeout_seconds: How long to wait for one App Store Connect request.
         api_clients: Static API keys (for the agent), as a JSON list in the environment.
         admin_username: The human account; also the owner every credential must share.
         admin_password_hash: argon2id hash of the admin password, never the password itself.
@@ -87,6 +115,9 @@ class Settings(BaseSettings):
             extends it.
         login_max_failures: Failed logins from one address before it is locked out.
         login_lockout_minutes: How long that lockout lasts.
+        chat_daily_token_budget: Model tokens (input plus output) one account may spend through
+            the chat endpoint per UTC day; the cap on what a leaked login or a runaway client
+            can cost.
     """
 
     model_config = SettingsConfigDict(
@@ -97,7 +128,12 @@ class Settings(BaseSettings):
     log_json: bool = True
     host: str = "127.0.0.1"
     port: int = Field(default=8000, ge=1, le=65535)
-    backend: Literal["mock"] = "mock"
+    backend: Literal["mock", "appstoreconnect"] = "mock"
+    appstore_key_id: str | None = None
+    appstore_issuer_id: str | None = None
+    appstore_private_key_path: Path | None = None
+    appstore_vendor_number: str | None = Field(default=None, pattern=r"^\d{1,12}$")
+    appstore_timeout_seconds: float = Field(default=20, gt=0, le=120)
     api_clients: list[ApiClient] = []
     trusted_proxies: str = "127.0.0.1"
     max_request_bytes: int = Field(default=65_536, ge=1024)
@@ -106,16 +142,39 @@ class Settings(BaseSettings):
     rate_limit_enabled: bool = True
     rate_limit_storage: str = "async+memory://"
     rate_limits: dict[RateLimitPolicy, str] = {}
+    openai_api_key: SecretStr | None = None
+    openai_model: str = Field(default="gpt-5-mini", min_length=1)
+    openai_reasoning_effort: Literal["minimal", "low", "medium", "high"] | None = None
+    openai_max_output_tokens: int = Field(default=2000, ge=64, le=32_000)
+    openai_timeout_seconds: float = Field(default=30, gt=0, le=300)
+    openai_base_url: str | None = None
+    openai_price_input_per_million: float | None = Field(default=None, ge=0)
+    openai_price_output_per_million: float | None = Field(default=None, ge=0)
     admin_username: str | None = Field(default=None, min_length=1, max_length=64)
     admin_password_hash: SecretStr | None = None
     access_token_ttl_minutes: int = Field(default=480, ge=1, le=1440)
     login_max_failures: int = Field(default=5, ge=1, le=100)
     login_lockout_minutes: int = Field(default=15, ge=1, le=1440)
+    chat_daily_token_budget: int = Field(default=500_000, ge=1_000)
 
     @property
     def effective_rate_limits(self) -> dict[RateLimitPolicy, str]:
         """Defaults with the configured overrides applied."""
         return {**RATE_LIMIT_DEFAULTS, **self.rate_limits}
+
+    @model_validator(mode="after")
+    def _validate_appstoreconnect(self) -> "Settings":
+        """Name every missing setting at startup rather than failing at the first request."""
+        if self.backend != "appstoreconnect":
+            return self
+        missing = [
+            f"RELEASE_ASSISTANT_{name.upper()}"
+            for name in ("appstore_key_id", "appstore_issuer_id", "appstore_private_key_path")
+            if getattr(self, name) is None
+        ]
+        if missing:
+            raise ValueError(f"backend=appstoreconnect also needs: {', '.join(missing)}")
+        return self
 
     @model_validator(mode="after")
     def _validate_cors_origins(self) -> "Settings":
