@@ -248,6 +248,11 @@ Adding a capability follows the layers: define or extend a port in `domain/ports
 4. Voice: ElevenLabs and OpenAI integrated at several levels of control, with measured latency, cost and quality.
 5. A SwiftUI client.
 
+### Known issues
+
+- **"Latest build" can be wrong on a real account.** `BuildService.latest` trusts the adapter's order instead of sorting by `uploaded_at` itself; on one real app it returned a 2019 build although a newer one may exist. Cause not yet confirmed (order not applied by Apple, or the newer build belongs to another app). Fix: sort in the application layer and add a real-data eval case.
+- **Per-step latency and cached tokens are not reported** by `/v1/chat`, so a slow answer cannot yet be attributed to the model or to App Store Connect.
+
 ## Architecture decisions
 
 | ADR | Decision |
