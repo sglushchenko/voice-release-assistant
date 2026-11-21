@@ -1,0 +1,254 @@
+/* One bold element, the orb; everything around it stays quiet.
+   The orb's colour carries meaning: cool teal while the assistant listens to you, warm amber while
+   it speaks, muted slate at rest. */
+
+@property --c1 { syntax: "<color>"; inherits: true; initial-value: #5b6b8c; }
+@property --c2 { syntax: "<color>"; inherits: true; initial-value: #7a86a6; }
+@property --c3 { syntax: "<color>"; inherits: true; initial-value: #46567a; }
+
+:root {
+  color-scheme: dark;
+  --bg: light-dark(#edf0f5, #0d1320);
+  --surface: light-dark(#ffffff, #161e30);
+  --surface-2: light-dark(#e3e8f0, #1d2740);
+  --text: light-dark(#182033, #e8ecf4);
+  --muted: light-dark(#5d6781, #93a0b8);
+  --line: light-dark(#d3dae6, #263149);
+  --listening: light-dark(#1f9d92, #3dc4b6);
+  --speaking: light-dark(#d9822b, #f4a95f);
+  --idle: light-dark(#8591ad, #66748f);
+  --font: ui-rounded, "SF Pro Rounded", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: ui-monospace, "SF Mono", Menlo, monospace;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 1rem/1.5 var(--font);
+}
+
+.app {
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
+  height: 100dvh;
+  max-width: 40rem;
+  margin: 0 auto;
+  padding: 0 1.25rem;
+}
+
+.bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1rem 0;
+}
+.bar h1 { margin: 0; font-size: 1rem; font-weight: 600; color: var(--muted); }
+
+button { font: inherit; color: inherit; cursor: pointer; }
+:focus-visible { outline: 2px solid var(--listening); outline-offset: 3px; }
+
+.icon-button {
+  display: grid;
+  place-items: center;
+  width: 2.75rem;
+  height: 2.75rem;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  background: var(--surface);
+}
+.icon-button svg { width: 1.35rem; height: 1.35rem; }
+.icon-button:disabled { opacity: .4; cursor: default; }
+.icon-button[aria-pressed="true"] { background: var(--surface-2); color: var(--speaking); }
+
+/* ---- the orb ------------------------------------------------------------------------ */
+/* Three colour layers turn slowly at different speeds inside the sphere, so the colours blend
+   like a liquid; a grain film sits on top. Only transform and opacity ever animate, which the
+   GPU handles without repainting, so the orb costs almost no CPU. The audio level changes the
+   scale of the whole orb and the strength of its glow. */
+
+.stage { display: grid; justify-items: center; padding: 1rem 0 1.5rem; }
+
+.orb-wrap { animation: breathe 6s ease-in-out infinite; }
+
+.orb {
+  --level: 0;
+  --c1: #5b6b8c; --c2: #7a86a6; --c3: #46567a;
+  position: relative;
+  width: clamp(10rem, 42vw, 14rem);
+  aspect-ratio: 1;
+  transform: scale(calc(1 + var(--level) * 0.16));
+  will-change: transform;
+  transition: --c1 .9s ease, --c2 .9s ease, --c3 .9s ease;
+}
+.orb[data-state="listening"] { --c1: #5f9bff; --c2: #5fe0d0; --c3: #9d8cff; }
+.orb[data-state="speaking"] { --c1: #ff7f66; --c2: #ffc16f; --c3: #5f9bff; }
+.orb[data-state="muted"] { opacity: .6; }
+.orb[data-state="connecting"] { animation: wait 1.4s ease-in-out infinite; }
+
+.glow {
+  position: absolute;
+  inset: -38%;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, color-mix(in oklab, var(--c1) 55%, transparent), transparent);
+  opacity: calc(.3 + var(--level) * .7);
+  will-change: opacity;
+}
+
+.sphere {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  overflow: hidden;
+  isolation: isolate;
+  /* Safari ignores rounded overflow for children that animate or use a blend mode, so the grain
+     showed as a square. A clip path and a mask are cut by the compositor and always hold. */
+  clip-path: circle(50% at 50% 50%);
+  -webkit-mask-image: -webkit-radial-gradient(white, black);
+  background: radial-gradient(circle at 50% 40%, color-mix(in oklab, var(--c3) 65%, black), color-mix(in oklab, var(--c3) 25%, black));
+  box-shadow: inset 0 0 2.5rem rgb(255 255 255 / .1);
+}
+.sphere i { position: absolute; inset: -10%; border-radius: 50%; will-change: transform; }
+.sphere i:nth-child(1) {
+  background: radial-gradient(circle at 26% 46%, var(--c1) 0, transparent 48%);
+  animation: spin 15s linear infinite;
+}
+.sphere i:nth-child(2) {
+  background: radial-gradient(circle at 74% 54%, var(--c2) 0, transparent 46%);
+  animation: spin 21s linear infinite reverse;
+}
+.sphere i:nth-child(3) {
+  background:
+    radial-gradient(circle at 50% 18%, var(--c3) 0, transparent 40%),
+    radial-gradient(circle at 56% 86%, var(--c1) 0, transparent 38%);
+  animation: spin 29s linear infinite;
+}
+/* The grain: noise drawn once by the browser, never animated. */
+.sphere::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-size: 180px;
+  mix-blend-mode: overlay;
+  opacity: .6;
+}
+
+@keyframes spin { to { transform: rotate(360deg); } }
+@keyframes breathe { 50% { transform: scale(1.03); } }
+@keyframes wait { 50% { opacity: .55; } }
+
+.state { margin: 1.25rem 0 0; font-weight: 600; }
+.latency { margin: .25rem 0 0; color: var(--muted); font-size: .9rem; font-variant-numeric: tabular-nums; }
+
+/* ---- transcript --------------------------------------------------------------------- */
+
+.log {
+  display: flex;
+  flex-direction: column;
+  gap: .6rem;
+  overflow-y: auto;
+  padding: .5rem 0 1rem;
+}
+.empty { margin: auto; max-width: 28rem; text-align: center; color: var(--muted); }
+
+.bubble {
+  max-width: 82%;
+  margin: 0;
+  padding: .6rem .9rem;
+  border-radius: 1.1rem;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  overflow-wrap: anywhere;
+}
+.bubble.user {
+  align-self: flex-end;
+  background: color-mix(in oklab, var(--listening) 16%, var(--surface));
+  border-color: color-mix(in oklab, var(--listening) 35%, var(--line));
+  border-bottom-right-radius: .35rem;
+}
+.bubble.agent { align-self: flex-start; border-bottom-left-radius: .35rem; }
+
+.chip {
+  align-self: flex-start;
+  display: inline-flex;
+  gap: .5rem;
+  align-items: baseline;
+  padding: .2rem .65rem;
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--muted);
+  font: .8rem var(--mono);
+}
+.chip.pending::after { content: "…"; }
+.chip.done { color: var(--text); }
+.chip.failed { color: var(--speaking); }
+.chip small { font: inherit; opacity: .75; }
+
+.note { align-self: center; margin: 0; color: var(--muted); font-size: .85rem; text-align: center; }
+
+/* ---- controls ----------------------------------------------------------------------- */
+
+.dock {
+  display: flex;
+  gap: .75rem;
+  justify-content: center;
+  align-items: center;
+  padding: 1rem 0 1.5rem;
+}
+
+.talk {
+  min-width: 13rem;
+  padding: .85rem 1.75rem;
+  border: 0;
+  border-radius: 999px;
+  background: var(--text);
+  color: var(--bg);
+  font-weight: 600;
+}
+.talk[data-running="true"] { background: var(--surface-2); color: var(--text); border: 1px solid var(--line); }
+
+/* ---- settings ----------------------------------------------------------------------- */
+
+.settings {
+  width: min(26rem, calc(100vw - 2rem));
+  padding: 1.5rem;
+  border: 1px solid var(--line);
+  border-radius: 1.25rem;
+  background: var(--surface);
+  color: var(--text);
+}
+.settings::backdrop { background: color-mix(in oklab, var(--bg) 70%, transparent); backdrop-filter: blur(4px); }
+.settings h2 { margin: 0 0 1rem; font-size: 1.15rem; }
+.settings label { display: grid; gap: .3rem; margin-bottom: .9rem; font-size: .9rem; color: var(--muted); }
+.settings input {
+  padding: .6rem .75rem;
+  border: 1px solid var(--line);
+  border-radius: .7rem;
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+}
+.hint { margin: -.3rem 0 .9rem; color: var(--muted); font-size: .85rem; }
+.actions { display: flex; gap: .6rem; justify-content: flex-end; }
+.actions button { padding: .55rem 1.1rem; border-radius: 999px; border: 1px solid var(--line); background: transparent; }
+.actions .primary { background: var(--text); color: var(--bg); border-color: transparent; }
+
+/* Wide screens: the orb and controls on the left, the conversation on the right, which also
+   makes the page work as a landscape screenshot. */
+@media (min-width: 56rem) {
+  .app { max-width: 64rem; grid-template-columns: 1fr 1.15fr; column-gap: 3rem; grid-template-rows: auto 1fr auto; }
+  .bar { grid-column: 1 / -1; }
+  .stage { grid-column: 1; grid-row: 2; align-self: center; }
+  .dock { grid-column: 1; grid-row: 3; }
+  .log { grid-column: 2; grid-row: 2 / span 2; padding-bottom: 1.5rem; justify-content: flex-end; }
+}
+
+/* A pulsing, breathing screen is the opposite of what these users asked for. */
+@media (prefers-reduced-motion: reduce) {
+  .orb-wrap, .orb[data-state="connecting"], .sphere i { animation: none; }
+  .orb { transition: none; transform: none; }
+}
